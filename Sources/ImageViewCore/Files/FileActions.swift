@@ -26,7 +26,8 @@ public final class FileActions {
         }
         guard trimmed != ".",
               trimmed != "..",
-              !trimmed.contains("/") else {
+              !trimmed.contains("/"),
+              !trimmed.contains(":") else {
             throw FileActionError.invalidBaseName
         }
 
@@ -41,6 +42,9 @@ public final class FileActions {
             .appendingPathExtension(ext)
         guard destination.deletingLastPathComponent().standardizedFileURL == parentDirectory.standardizedFileURL else {
             throw FileActionError.invalidBaseName
+        }
+        if destination.standardizedFileURL == url.standardizedFileURL {
+            return url
         }
         try fileManager.moveItem(at: url, to: destination)
         return destination

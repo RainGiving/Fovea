@@ -1,6 +1,86 @@
 import AppKit
 
 @MainActor
+final class PageNavigationButton: NSButton {
+    private var hoverTrackingArea: NSTrackingArea?
+    private var isHovered = false
+    private var isPressed = false
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override var isEnabled: Bool {
+        didSet {
+            if !isEnabled {
+                isHovered = false
+                isPressed = false
+            }
+            refreshAppearance()
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = isEnabled
+        refreshAppearance()
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        refreshAppearance()
+        super.mouseExited(with: event)
+    }
+
+    override func highlight(_ flag: Bool) {
+        super.highlight(flag)
+        isPressed = flag && isEnabled
+        refreshAppearance()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshAppearance()
+    }
+
+    func refreshAppearance() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let backgroundColor: NSColor
+            if isPressed {
+                backgroundColor = .controlAccentColor.withAlphaComponent(0.24)
+            } else if isHovered {
+                backgroundColor = .controlAccentColor.withAlphaComponent(0.15)
+            } else {
+                backgroundColor = PageNavigationOverlayView.backgroundColor.withAlphaComponent(0.92)
+            }
+            layer?.backgroundColor = backgroundColor.cgColor
+            contentTintColor = isEnabled ? .labelColor : .tertiaryLabelColor
+        }
+        needsDisplay = true
+    }
+
+    var testingShowsHover: Bool { isHovered && isEnabled && !isPressed }
+    var testingShowsPressed: Bool { isPressed && isEnabled }
+
+    func setHoveredForTesting(_ hovered: Bool) {
+        isHovered = hovered && isEnabled
+        refreshAppearance()
+    }
+}
+
+@MainActor
 final class PageNavigationOverlayView: NSView {
     static let controlSize = CGSize(width: 44, height: 64)
     static var backgroundColor: NSColor { .windowBackgroundColor }
@@ -11,8 +91,8 @@ final class PageNavigationOverlayView: NSView {
     var onPointerEntered: (() -> Void)?
     var onPointerExited: (() -> Void)?
 
-    private let previousButton = NSButton()
-    private let nextButton = NSButton()
+    private let previousButton = PageNavigationButton()
+    private let nextButton = PageNavigationButton()
     private var pointerTrackingAreas: [NSTrackingArea] = []
 
     override init(frame frameRect: NSRect = .zero) {
@@ -61,10 +141,10 @@ final class PageNavigationOverlayView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         for button in [previousButton, nextButton] where !button.isHidden {
-            let localPoint = button.convert(point, from: self)
-            if button.bounds.contains(localPoint) {
-                return button.hitTest(localPoint)
-            }
+            // NSView.hitTest expects a point in the receiver's superview
+            // coordinate system. Both buttons are direct children, so the
+            // overlay point must be passed through unchanged.
+            if let hitView = button.hitTest(point) { return hitView }
         }
         return nil
     }
@@ -121,7 +201,11 @@ final class PageNavigationOverlayView: NSView {
         action: Selector
     ) {
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
+        let symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+        button.image = NSImage(
+            systemSymbolName: symbol,
+            accessibilityDescription: description
+        )?.withSymbolConfiguration(symbolConfiguration)
         button.imageScaling = .scaleProportionallyDown
         button.bezelStyle = .regularSquare
         button.isBordered = false
@@ -129,25 +213,26 @@ final class PageNavigationOverlayView: NSView {
         button.target = self
         button.action = action
         button.toolTip = description
+        button.focusRingType = .default
     }
 
     private func updateButtonLayers() {
         let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 1
         for button in [previousButton, nextButton] {
-            button.layer?.backgroundColor = Self.backgroundColor.cgColor
-            button.layer?.cornerRadius = 8
+            button.layer?.cornerRadius = 14
             button.layer?.borderWidth = Self.borderWidth(forBackingScaleFactor: scale)
             button.layer?.borderColor = Self.borderColor.cgColor
             button.layer?.shadowColor = NSColor.black.withAlphaComponent(0.2).cgColor
-            button.layer?.shadowOpacity = 0.45
-            button.layer?.shadowRadius = 5
-            button.layer?.shadowOffset = CGSize(width: 0, height: -1)
+            button.layer?.shadowOpacity = 0.34
+            button.layer?.shadowRadius = 7
+            button.layer?.shadowOffset = CGSize(width: 0, height: -2)
+            button.refreshAppearance()
         }
     }
 
     #if DEBUG
-    var debugPreviousButton: NSButton { previousButton }
-    var debugNextButton: NSButton { nextButton }
+    var debugPreviousButton: PageNavigationButton { previousButton }
+    var debugNextButton: PageNavigationButton { nextButton }
     func performDebugPrevious() { showPrevious() }
     func performDebugNext() { showNext() }
     #endif

@@ -23,6 +23,7 @@ final class ContinuousReadingView: NSView {
     var testingPageCount: Int { document.pages.count }
     var testingDecodedPageCount: Int { document.pages.filter { $0.image != nil }.count }
     var testingPageURLs: [URL] { document.pages.map { $0.item.url } }
+    var testingLastNearestLookupCount: Int { document.lastNearestLookupCount }
 
     override init(frame frameRect: NSRect = .zero) {
         super.init(frame: frameRect)
@@ -124,8 +125,20 @@ private final class ContinuousReadingClipView: NSClipView {
 
 private final class ContinuousReadingDocumentView: NSView {
     var pages: [ContinuousReadingPage] = [] {
-        didSet { needsDisplay = true }
+        didSet {
+            itemIndexByID = Dictionary(
+                pages.enumerated().map { ($0.element.item.id, $0.offset) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            cachedLayoutWidth = nil
+            cachedPageFrames = []
+            needsDisplay = true
+        }
     }
+    private var itemIndexByID: [ImageItem.ID: Int] = [:]
+    private var cachedLayoutWidth: CGFloat?
+    private var cachedPageFrames: [CGRect] = []
+    private(set) var lastNearestLookupCount = 0
 
     override var isFlipped: Bool { true }
 
@@ -134,22 +147,62 @@ private final class ContinuousReadingDocumentView: NSView {
     }
 
     func frame(for itemID: ImageItem.ID) -> CGRect? {
-        zip(pages, pageFrames(for: bounds.width)).first { $0.0.item.id == itemID }?.1
+        guard let index = itemIndexByID[itemID] else { return nil }
+        let frames = pageFrames(for: bounds.width)
+        return frames.indices.contains(index) ? frames[index] : nil
     }
 
     func nearestItemID(toDocumentY y: CGFloat) -> ImageItem.ID? {
-        zip(pages, pageFrames(for: bounds.width))
-            .min { abs($0.1.midY - y) < abs($1.1.midY - y) }?
-            .0.item.id
+        let frames = pageFrames(for: bounds.width)
+        guard !frames.isEmpty else {
+            lastNearestLookupCount = 0
+            return nil
+        }
+
+        var lowerBound = 0
+        var upperBound = frames.count
+        var lookupCount = 0
+        while lowerBound < upperBound {
+            lookupCount += 1
+            let middle = lowerBound + (upperBound - lowerBound) / 2
+            if frames[middle].midY < y {
+                lowerBound = middle + 1
+            } else {
+                upperBound = middle
+            }
+        }
+        lastNearestLookupCount = lookupCount
+        let upperIndex = min(lowerBound, frames.count - 1)
+        let lowerIndex = max(0, upperIndex - 1)
+        let nearestIndex = abs(frames[lowerIndex].midY - y) <= abs(frames[upperIndex].midY - y)
+            ? lowerIndex
+            : upperIndex
+        return pages[nearestIndex].item.id
     }
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.black.setFill()
         dirtyRect.fill()
-        for (page, frame) in zip(pages, pageFrames(for: bounds.width)) where frame.intersects(dirtyRect) {
+        let frames = pageFrames(for: bounds.width)
+        var lowerBound = 0
+        var upperBound = frames.count
+        while lowerBound < upperBound {
+            let middle = lowerBound + (upperBound - lowerBound) / 2
+            if frames[middle].maxY < dirtyRect.minY {
+                lowerBound = middle + 1
+            } else {
+                upperBound = middle
+            }
+        }
+
+        var index = lowerBound
+        while index < frames.count, frames[index].minY <= dirtyRect.maxY {
+            let page = pages[index]
+            let frame = frames[index]
             guard let image = page.image else {
                 NSColor.windowBackgroundColor.withAlphaComponent(0.18).setFill()
                 frame.fill()
+                index += 1
                 continue
             }
             NSImage(cgImage: image.cgImage, size: frame.size).draw(
@@ -160,15 +213,23 @@ private final class ContinuousReadingDocumentView: NSView {
                 respectFlipped: true,
                 hints: [.interpolation: NSImageInterpolation.high]
             )
+            index += 1
         }
     }
 
     private func pageFrames(for width: CGFloat) -> [CGRect] {
+        if let cachedLayoutWidth,
+           abs(cachedLayoutWidth - width) < 0.5,
+           cachedPageFrames.count == pages.count {
+            return cachedPageFrames
+        }
         let horizontalInset: CGFloat = 16
         let gap: CGFloat = 18
         let contentWidth = max(width - horizontalInset * 2, 1)
         var y: CGFloat = 16
-        return pages.map { page in
+        var frames: [CGRect] = []
+        frames.reserveCapacity(pages.count)
+        for page in pages {
             let aspectHeight: CGFloat
             if let image = page.image, image.cgImage.width > 0 {
                 aspectHeight = contentWidth * CGFloat(image.cgImage.height) / CGFloat(image.cgImage.width)
@@ -177,7 +238,10 @@ private final class ContinuousReadingDocumentView: NSView {
             }
             let frame = CGRect(x: horizontalInset, y: y, width: contentWidth, height: max(aspectHeight, 1))
             y = frame.maxY + gap
-            return frame
+            frames.append(frame)
         }
+        cachedLayoutWidth = width
+        cachedPageFrames = frames
+        return frames
     }
 }

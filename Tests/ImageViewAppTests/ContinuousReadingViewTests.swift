@@ -63,6 +63,24 @@ final class ContinuousReadingViewTests: XCTestCase {
         XCTAssertEqual(view.testingDecodedPageCount, 1)
     }
 
+    func testLargeFolderFocusLookupUsesBinarySearch() {
+        let view = ContinuousReadingView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
+        let items = (0..<4_096).map {
+            ImageItem(url: URL(fileURLWithPath: "/tmp/large-folder-\($0).png"), format: .png)
+        }
+        var focusedID: ImageItem.ID?
+        view.onFocusedItemChanged = { focusedID = $0 }
+        view.apply(
+            pages: items.map { ContinuousReadingPage(item: $0, image: nil) },
+            currentItemID: items[0].id
+        )
+
+        view.testingScrollToItem(with: items[3_000].id)
+
+        XCTAssertEqual(focusedID, items[3_000].id)
+        XCTAssertLessThanOrEqual(view.testingLastNearestLookupCount, 13)
+    }
+
     private func makeDecodedImage(width: Int, height: Int) -> DecodedImage {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let context = CGContext(

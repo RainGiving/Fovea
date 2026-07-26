@@ -27,8 +27,23 @@ final class FileActionsTests: XCTestCase {
 
     func testRenameRejectsPathLikeNames() {
         XCTAssertEqual(renameError(for: "nested/name"), .invalidBaseName)
+        XCTAssertEqual(renameError(for: "nested:name"), .invalidBaseName)
         XCTAssertEqual(renameError(for: "."), .invalidBaseName)
         XCTAssertEqual(renameError(for: ".."), .invalidBaseName)
+    }
+
+    func testRenameToExistingBaseNameIsANoOp() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = root.appendingPathComponent("same.png")
+        let contents = Data("keep me".utf8)
+        try contents.write(to: original)
+
+        let renamed = try FileActions().rename(original, to: "same")
+
+        XCTAssertEqual(renamed, original)
+        XCTAssertEqual(try Data(contentsOf: original), contents)
     }
 
     private func renameError(for newBaseName: String) -> FileActionError? {

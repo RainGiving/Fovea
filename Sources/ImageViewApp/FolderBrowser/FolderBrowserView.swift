@@ -153,6 +153,7 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
 
     func applyItems(_ newItems: [ImageItem]) {
         guard items != newItems else { return }
+        let previouslySelectedIDs = selectedIDs(from: collectionView.selectionIndexPaths)
         items = newItems
         itemIndexPathsByID = Dictionary(
             uniqueKeysWithValues: newItems.enumerated().map { index, item in
@@ -160,6 +161,9 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
             }
         )
         collectionView.reloadData()
+        collectionView.selectionIndexPaths = Set(
+            previouslySelectedIDs.compactMap { itemIndexPathsByID[$0] }
+        )
         updateBatchActionAvailability()
     }
 

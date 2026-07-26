@@ -301,6 +301,10 @@ final class AppDelegateTests: XCTestCase {
     }
 
     func testConstructingOffscreenMenuDoesNotRedirectRecentMenuRebuild() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
         let harness = WindowHarness()
         let delegate = harness.makeDelegate()
         let installedMenu = delegate.makeMainMenu(preferredLanguages: ["en"])
@@ -314,7 +318,8 @@ final class AppDelegateTests: XCTestCase {
             offscreenMenu.items[1].submenu?.item(withTitle: "Open Recent")?.submenu
         )
         delegate.openURLs([URL(fileURLWithPath: "/first.png"), URL(fileURLWithPath: "/second.png")])
-        let openedURL = URL(fileURLWithPath: "/opened-by-second-window.png")
+        let openedURL = folder.appendingPathComponent("opened-by-second-window.png")
+        try Data().write(to: openedURL)
 
         delegate.imageWindowControllersForTesting[1].onSuccessfulOpen?(openedURL)
 
@@ -324,6 +329,25 @@ final class AppDelegateTests: XCTestCase {
             openedURL
         )
         XCTAssertNil(offscreenRecentMenu.items.first?.representedObject)
+    }
+
+    func testOpenRecentMenuOmitsFilesThatNoLongerExist() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let existing = folder.appendingPathComponent("existing.png")
+        let missing = folder.appendingPathComponent("missing.png")
+        try Data().write(to: existing)
+        let harness = WindowHarness()
+        harness.recentURLs = [missing, existing]
+
+        let menu = harness.makeDelegate().makeMainMenu(preferredLanguages: ["en"])
+        let recentMenu = try XCTUnwrap(
+            menu.items[1].submenu?.item(withTitle: "Open Recent")?.submenu
+        )
+
+        XCTAssertEqual(recentMenu.items.compactMap { $0.representedObject as? URL }, [existing])
     }
 
     func testConstructingOffscreenMenuDoesNotRedirectAppearanceCheckmarkUpdates() throws {
@@ -374,6 +398,29 @@ final class AppDelegateTests: XCTestCase {
         XCTAssertNotNil(menu.items[1].submenu?.item(withTitle: "Browse Folder…"))
         XCTAssertNotNil(menu.items[3].submenu?.item(withTitle: "Rotate Clockwise"))
         XCTAssertNotNil(menu.items[3].submenu?.item(withTitle: "Crop"))
+    }
+
+    func testMainMenuUsesUniqueShortcutsAndStandardFullScreenShortcut() throws {
+        let menu = AppDelegate().makeMainMenu(preferredLanguages: ["en"])
+        func commandItems(in menu: NSMenu) -> [NSMenuItem] {
+            menu.items.flatMap { item in
+                [item] + (item.submenu.map(commandItems(in:)) ?? [])
+            }
+        }
+
+        let items = commandItems(in: menu).filter { !$0.keyEquivalent.isEmpty }
+        let grouped = Dictionary(grouping: items) { item in
+            "\(item.keyEquivalent.lowercased())|\(item.keyEquivalentModifierMask.rawValue)"
+        }
+        let duplicates = grouped.values
+            .filter { $0.count > 1 }
+            .map { $0.map(\.title).sorted().joined(separator: ", ") }
+            .sorted()
+
+        XCTAssertEqual(duplicates, [])
+        let fullScreen = try XCTUnwrap(menu.items[2].submenu?.item(withTitle: "Enter Full Screen"))
+        XCTAssertEqual(fullScreen.keyEquivalent, "f")
+        XCTAssertEqual(fullScreen.keyEquivalentModifierMask, [.command, .control])
     }
 
     func testMainMenuLocalizesSubmenuItemsForSimplifiedChinese() {

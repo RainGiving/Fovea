@@ -157,6 +157,17 @@ final class FolderBrowserViewTests: XCTestCase {
         XCTAssertEqual(view.testingSelectedIDs, [second.id])
     }
 
+    func testItemReorderPreservesSelectionByItemIdentity() {
+        let first = ImageItem(url: URL(fileURLWithPath: "/tmp/first.png"), format: .png)
+        let second = ImageItem(url: URL(fileURLWithPath: "/tmp/second.jpg"), format: .jpeg)
+        let view = FolderBrowserView(thumbnailProvider: .stub)
+        view.apply(items: [first, second], selectedIDs: [second.id])
+
+        view.applyItems([second, first])
+
+        XCTAssertEqual(view.testingSelectedIDs, [second.id])
+    }
+
     func testBatchActionsRequireContentSelection() {
         let item = ImageItem(url: URL(fileURLWithPath: "/tmp/one.png"), format: .png)
         let view = FolderBrowserView(thumbnailProvider: .stub)

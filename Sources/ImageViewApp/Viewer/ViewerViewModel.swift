@@ -204,7 +204,10 @@ final class ViewerViewModel: ObservableObject {
             currentMetadata = nil
             persistedCurrentImage = nil
             loadPhase = .failed
-            errorMessage = "不支持的图片格式：\(url.pathExtension)"
+            errorMessage = String(
+                format: AppStrings.text("viewer.error.unsupportedFormat"),
+                url.pathExtension
+            )
             updateDisplayTitle()
             return
         }
@@ -297,7 +300,10 @@ final class ViewerViewModel: ObservableObject {
             persistedCurrentImage = nil
             displayedFileVersion = nil
             loadPhase = .failed
-            errorMessage = "图片损坏或无法解码：\(url.lastPathComponent)"
+            errorMessage = String(
+                format: AppStrings.text("viewer.error.decodeFailed"),
+                url.lastPathComponent
+            )
             updateDisplayTitle()
         }
     }
@@ -359,7 +365,10 @@ final class ViewerViewModel: ObservableObject {
             updateDisplayTitle()
             startDisplayCurrentAndPreload()
         } catch {
-            errorMessage = "无法移动到废纸篓：\(url.lastPathComponent)"
+            errorMessage = String(
+                format: AppStrings.text("viewer.error.trashFailed"),
+                url.lastPathComponent
+            )
         }
     }
 
@@ -375,7 +384,10 @@ final class ViewerViewModel: ObservableObject {
             errorMessage = nil
             updateDisplayTitle()
         } catch {
-            errorMessage = "无法重命名：\(item.url.lastPathComponent)"
+            errorMessage = String(
+                format: AppStrings.text("viewer.error.renameFailed"),
+                item.url.lastPathComponent
+            )
         }
     }
 
@@ -465,7 +477,7 @@ final class ViewerViewModel: ObservableObject {
             errorMessage = nil
             updateDisplayTitle()
         } catch {
-            errorMessage = "无法应用编辑"
+            errorMessage = AppStrings.text("viewer.error.applyEditFailed")
         }
     }
 
@@ -518,7 +530,7 @@ final class ViewerViewModel: ObservableObject {
             updateDisplayTitle()
             return true
         } catch {
-            errorMessage = "无法保存该格式的编辑结果"
+            errorMessage = AppStrings.text("viewer.error.saveFailed")
             return false
         }
     }
@@ -555,7 +567,7 @@ final class ViewerViewModel: ObservableObject {
             updateDisplayTitle()
             return true
         } catch {
-            errorMessage = "无法另存编辑结果"
+            errorMessage = AppStrings.text("viewer.error.saveAsFailed")
             return false
         }
     }
@@ -580,7 +592,7 @@ final class ViewerViewModel: ObservableObject {
             updateDisplayTitle()
             return true
         } catch {
-            errorMessage = "无法还原原始图片"
+            errorMessage = AppStrings.text("viewer.error.discardFailed")
             return false
         }
     }
@@ -643,12 +655,22 @@ final class ViewerViewModel: ObservableObject {
     func refreshCurrentFileIfNeeded() async {
         guard let item = navigationState?.currentItem else { return }
         guard let currentVersion = currentFileVersionAtURL(item.url) else {
+            if hasUnsavedEdits {
+                errorMessage = String(
+                    format: AppStrings.text("viewer.error.externallyRemovedWithUnsavedEdits"),
+                    item.url.lastPathComponent
+                )
+                return
+            }
             removeExternallyUnavailableCurrentItem(item)
             return
         }
         guard currentVersion != displayedFileVersion else { return }
         guard !hasUnsavedEdits else {
-            errorMessage = "图片已在外部修改：\(item.url.lastPathComponent)"
+            errorMessage = String(
+                format: AppStrings.text("viewer.error.externallyModified"),
+                item.url.lastPathComponent
+            )
             return
         }
 
@@ -670,7 +692,10 @@ final class ViewerViewModel: ObservableObject {
         } catch {
             guard generation == displayRequestGeneration else { return }
             loadPhase = .failed
-            errorMessage = "图片已在外部修改且无法解码：\(item.url.lastPathComponent)"
+            errorMessage = String(
+                format: AppStrings.text("viewer.error.externallyModifiedDecodeFailed"),
+                item.url.lastPathComponent
+            )
         }
     }
 
@@ -697,7 +722,10 @@ final class ViewerViewModel: ObservableObject {
             persistedCurrentImage = nil
             displayedFileVersion = nil
             loadPhase = .failed
-            errorMessage = "图片损坏或无法解码：\(item.url.lastPathComponent)"
+            errorMessage = String(
+                format: AppStrings.text("viewer.error.decodeFailed"),
+                item.url.lastPathComponent
+            )
             updateDisplayTitle()
         }
     }
@@ -749,7 +777,10 @@ final class ViewerViewModel: ObservableObject {
     private func removeExternallyUnavailableCurrentItem(_ item: ImageItem) {
         navigationState?.removeCurrent()
         displayedFileVersion = nil
-        errorMessage = "文件已在外部移除：\(item.url.lastPathComponent)"
+        errorMessage = String(
+            format: AppStrings.text("viewer.error.externallyRemoved"),
+            item.url.lastPathComponent
+        )
 
         guard navigationState?.currentItem != nil else {
             navigationState = nil
@@ -763,15 +794,18 @@ final class ViewerViewModel: ObservableObject {
 
         loadPhase = .loading
         updateDisplayTitle()
-        startDisplayCurrentAndPreload()
+        startDisplayCurrentAndPreload(preservingError: true)
     }
 
-    private func startDisplayCurrentAndPreload() {
+    private func startDisplayCurrentAndPreload(preservingError: Bool = false) {
         guard let item = navigationState?.currentItem else { return }
         clearEditHistory()
         hasUnsavedEdits = false
         let generation = beginDisplayRequest()
         loadPhase = .loading
+        if !preservingError {
+            errorMessage = nil
+        }
         displayTask = Task { [weak self] in
             await self?.displayCurrentAndPreload(item: item, generation: generation)
         }
@@ -821,8 +855,17 @@ final class ViewerViewModel: ObservableObject {
         displayTitle = Self.displayTitle(filename: currentFilename, hasUnsavedEdits: hasUnsavedEdits)
     }
 
-    static func displayTitle(filename: String, hasUnsavedEdits: Bool) -> String {
-        hasUnsavedEdits ? "\(filename) - Edited" : filename
+    static func displayTitle(
+        filename: String,
+        hasUnsavedEdits: Bool,
+        preferredLanguages: [String] = Locale.preferredLanguages
+    ) -> String {
+        hasUnsavedEdits
+            ? String(
+                format: AppStrings.text("viewer.title.edited", preferredLanguages: preferredLanguages),
+                filename
+            )
+            : filename
     }
 
     private func updateMetadata(url: URL, format: SupportedImageFormat, image: DecodedImage) {

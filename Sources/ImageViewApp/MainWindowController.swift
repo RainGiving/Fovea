@@ -301,7 +301,12 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         rootView.wantsLayer = true
         window?.acceptsMouseMovedEvents = true
         rootView.onFileDropped = { [weak self] url in
-            self?.open(url: url)
+            guard let self else { return }
+            if Self.isDirectoryURL(url) {
+                self.openFolder(url: url)
+            } else {
+                self.open(url: url)
+            }
         }
         emptyStateView.onOpenRequested = { [weak self] in
             self?.onOpenRequested?()
@@ -761,13 +766,13 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         }
 
         let alert = NSAlert()
-        alert.messageText = "重命名"
-        alert.informativeText = "输入新的文件名（不含扩展名）。"
+        alert.messageText = AppStrings.text("viewer.rename.title")
+        alert.informativeText = AppStrings.text("viewer.rename.message")
         let textField = NSTextField(string: item.url.deletingPathExtension().lastPathComponent)
         textField.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
         alert.accessoryView = textField
-        alert.addButton(withTitle: "重命名")
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: AppStrings.text("viewer.rename.button"))
+        alert.addButton(withTitle: AppStrings.text("viewer.rename.cancel"))
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let newName = textField.stringValue
@@ -813,13 +818,15 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     @objc func startCropping(_ sender: Any?) {
-        guard viewModel.canEditCurrentImage,
+        guard !settings.usesContinuousReading,
+              viewModel.canEditCurrentImage,
               let imageDrawRect = canvas.imageDrawRect else {
             NSSound.beep()
             return
         }
 
         cropOverlay.beginCropping(in: imageDrawRect)
+        hideFilmstripOverlay(immediately: true)
         updateCropControls()
         window?.makeFirstResponder(cropOverlay)
     }
@@ -900,6 +907,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     @objc func toggleContinuousReading(_ sender: Any?) {
+        guard !cropOverlay.isCropping else {
+            NSSound.beep()
+            return
+        }
         settings.usesContinuousReading.toggle()
     }
 
@@ -1485,6 +1496,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         true
     }
 
+    static func isDirectoryURL(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+    }
+
     static func shouldResetCanvasTransform(from previousURL: URL?, to newURL: URL?) -> Bool {
         previousURL?.standardizedFileURL != newURL?.standardizedFileURL
     }
@@ -1693,6 +1708,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     private func applySettings() {
+        if cropOverlay.isCropping && settings.usesContinuousReading {
+            cancelCrop(nil)
+        }
         canvas.backgroundColor = Self.canvasBackgroundColor()
         syncFilmstripContent(navigationState: viewModel.navigationState)
         if !settings.showsFilmstrip {
@@ -1804,7 +1822,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             isEnabled: settings.showsFilmstrip,
             hasLoadedImage: viewModel.currentImage != nil,
             canvasScale: canvas.scale,
-            pointerIsActive: pointerIsActive
+            pointerIsActive: pointerIsActive,
+            isCropping: cropOverlay.isCropping
         )
     }
 
@@ -1922,7 +1941,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             divider.boxType = .separator
         }
 
-        titleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.maximumNumberOfLines = 1
@@ -1957,7 +1976,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         titleBarView.addGestureRecognizer(titleBarDoubleClickRecognizer)
 
         for label in [bottomDimensionLabel, bottomPageLabel, bottomZoomLabel] {
-            label.font = .systemFont(ofSize: 10, weight: .medium)
+            label.font = .systemFont(ofSize: 11, weight: .medium)
             label.textColor = .secondaryLabelColor
             label.maximumNumberOfLines = 1
         }
@@ -2254,6 +2273,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     private func enterFolderBrowserMode() {
+        if cropOverlay.isCropping {
+            cropOverlay.endCropping()
+            updateCropControls()
+        }
         isFolderBrowserMode = true
         canvas.isHidden = true
         continuousReadingView.isHidden = true
@@ -2314,6 +2337,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var hasLoadedImageForTesting: Bool { viewModel.currentImage != nil }
     var canEditCurrentImageForTesting: Bool { viewModel.canEditCurrentImage }
     var hasUnsavedEditsForTesting: Bool { viewModel.hasUnsavedEdits }
+    var isCroppingForTesting: Bool { cropOverlay.isCropping }
     var isFolderBrowserVisibleForTesting: Bool { !folderBrowserView.isHidden }
     var folderBrowserIsOperatingForTesting: Bool { folderBrowserViewModel.isOperating }
     var isCanvasVisibleForTesting: Bool { !canvas.isHidden }
@@ -2480,9 +2504,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         isEnabled: Bool,
         hasLoadedImage: Bool,
         canvasScale: CGFloat,
-        pointerIsActive: Bool
+        pointerIsActive: Bool,
+        isCropping: Bool = false
     ) -> Bool {
-        isEnabled && hasLoadedImage && canvasScale <= 1.01 && pointerIsActive
+        isEnabled && hasLoadedImage && canvasScale <= 1.01 && pointerIsActive && !isCropping
     }
 
     static func shouldAutoHideFilmstrip(isEnabled: Bool, pointerIsOverOverlay: Bool) -> Bool {
@@ -2651,9 +2676,25 @@ extension MainWindowController: NSMenuItemValidation {
             return true
         }
         if menuItem.action == #selector(toggleContinuousReading(_:)) {
-            guard !isFolderBrowserMode, viewModel.currentImage != nil else { return false }
+            guard !isFolderBrowserMode,
+                  !cropOverlay.isCropping,
+                  viewModel.currentImage != nil else { return false }
             menuItem.state = settings.usesContinuousReading ? .on : .off
             return true
+        }
+        if menuItem.action == #selector(startCropping(_:)), settings.usesContinuousReading {
+            return false
+        }
+        if menuItem.action == #selector(showPreviousImage(_:))
+            || menuItem.action == #selector(showNextImage(_:)) {
+            guard !isFolderBrowserMode else { return false }
+            let availability = Self.pageControlAvailability(
+                navigationState: viewModel.navigationState,
+                readingDirection: settings.readingDirection
+            )
+            return menuItem.action == #selector(showPreviousImage(_:))
+                ? availability.previous
+                : availability.next
         }
 
         guard let command = Self.menuCommand(for: menuItem.action) else {

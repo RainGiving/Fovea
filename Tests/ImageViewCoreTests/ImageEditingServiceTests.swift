@@ -88,6 +88,22 @@ final class ImageEditingServiceTests: XCTestCase {
         XCTAssertFalse(formats.contains(.svg))
     }
 
+    func testSaveDoesNotDeleteAnotherSaveOperationsTemporaryFile() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let outputURL = root.appendingPathComponent("output.png")
+        let otherTemporaryURL = root.appendingPathComponent(".output.png.imageview-tmp")
+        let sentinel = Data("in-progress save".utf8)
+        try sentinel.write(to: otherTemporaryURL)
+        let image = try makeImage(rows: [[.red, .green], [.blue, .yellow]])
+
+        try ImageEditingService().save(image, to: outputURL, format: .png)
+
+        XCTAssertEqual(try Data(contentsOf: otherTemporaryURL), sentinel)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+    }
+
     func testHEIFSaveThrowsWhenNoHEIFDestinationWriterExists() throws {
         let image = try makeImage(rows: [[.red]])
         let destinationTypes = CGImageDestinationCopyTypeIdentifiers() as? [String] ?? []

@@ -58,8 +58,7 @@ public final class ImageEditingService {
 
         let temporaryURL = url
             .deletingLastPathComponent()
-            .appendingPathComponent(".\(url.lastPathComponent).imageview-tmp")
-        try? FileManager.default.removeItem(at: temporaryURL)
+            .appendingPathComponent(".\(url.lastPathComponent).imageview-\(UUID().uuidString).tmp")
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
 
         guard let destination = CGImageDestinationCreateWithURL(

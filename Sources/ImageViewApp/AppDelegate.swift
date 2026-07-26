@@ -278,7 +278,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.addItem(toggleFilmstripMenuItem)
 
         let continuousReadingMenuItem = NSMenuItem(title: text("menu.view.continuousReading"), action: #selector(MainWindowController.toggleContinuousReading(_:)), keyEquivalent: "r")
-        continuousReadingMenuItem.keyEquivalentModifierMask = [.command, .option]
+        continuousReadingMenuItem.keyEquivalentModifierMask = [.command, .control]
         viewMenu.addItem(continuousReadingMenuItem)
 
         let toggleInspectorMenuItem = NSMenuItem(title: text("menu.view.showInfo"), action: #selector(MainWindowController.toggleInspector(_:)), keyEquivalent: "i")
@@ -305,7 +305,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appearanceMenu.addItem(item)
         }
         viewMenu.addItem(.separator())
-        viewMenu.addItem(NSMenuItem(title: text("menu.view.enterFullScreen"), action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f"))
+        let fullScreenMenuItem = NSMenuItem(
+            title: text("menu.view.enterFullScreen"),
+            action: #selector(NSWindow.toggleFullScreen(_:)),
+            keyEquivalent: "f"
+        )
+        fullScreenMenuItem.keyEquivalentModifierMask = [.command, .control]
+        viewMenu.addItem(fullScreenMenuItem)
 
         let editMenuItem = NSMenuItem(title: text("menu.image"), action: nil, keyEquivalent: "")
         mainMenu.addItem(editMenuItem)
@@ -346,8 +352,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         saveEditsAsMenuItem.keyEquivalentModifierMask = [.command, .shift]
         editMenu.addItem(saveEditsAsMenuItem)
 
-        let discardEditsMenuItem = NSMenuItem(title: text("menu.image.discardEdits"), action: #selector(MainWindowController.discardEdits(_:)), keyEquivalent: "z")
-        discardEditsMenuItem.keyEquivalentModifierMask = [.command, .shift]
+        let discardEditsMenuItem = NSMenuItem(
+            title: text("menu.image.discardEdits"),
+            action: #selector(MainWindowController.discardEdits(_:)),
+            keyEquivalent: ""
+        )
         editMenu.addItem(discardEditsMenuItem)
 
         let windowMenuItem = NSMenuItem(title: text("menu.window"), action: nil, keyEquivalent: "")
@@ -470,7 +479,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func rebuildOpenRecentMenu(_ openRecentMenu: NSMenu) {
         openRecentMenu.removeAllItems()
-        let urls = recentDocumentURLs().prefix(10)
+        let urls = validRecentDocumentURLs().prefix(10)
         guard !urls.isEmpty else {
             let emptyItem = NSMenuItem(title: AppStrings.text("menu.file.noRecentImages"), action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false

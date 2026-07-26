@@ -183,6 +183,17 @@ final class MainWindowControllerTests: XCTestCase {
         XCTAssertEqual(MainWindowController.externalFileCheckInterval, 2)
     }
 
+    func testDroppedDirectoryDetectionDistinguishesFoldersFromFiles() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("image.png")
+        try Data().write(to: file)
+
+        XCTAssertTrue(MainWindowController.isDirectoryURL(root))
+        XCTAssertFalse(MainWindowController.isDirectoryURL(file))
+    }
+
     func testResolveUnsavedChangesProceedsOnlyForDiscardOrSuccessfulSave() {
         XCTAssertEqual(
             MainWindowController.resolveUnsavedChanges(choice: .save, saveSucceeded: true),
@@ -372,6 +383,33 @@ final class MainWindowControllerTests: XCTestCase {
         for item in [rename, reveal, trash, rotate, crop, zoom] {
             XCTAssertFalse(controller.validateMenuItem(item), "\(item.title) should not target the hidden viewer")
         }
+    }
+
+    func testEnteringFolderBrowserEndsActiveCropSession() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("crop.png")
+        try writeTestPNG(to: imageURL)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.startCropping(nil)
+        XCTAssertTrue(controller.isCroppingForTesting)
+        let continuousReading = NSMenuItem(
+            title: "Continuous Reading",
+            action: #selector(MainWindowController.toggleContinuousReading(_:)),
+            keyEquivalent: ""
+        )
+        XCTAssertFalse(controller.validateMenuItem(continuousReading))
+
+        controller.openFolderForTesting(root, items: [ImageItem(url: imageURL, format: .png)])
+
+        XCTAssertFalse(controller.isCroppingForTesting)
     }
 
     func testFullImageLoadProducesOneConciseAccessibilityAnnouncement() async throws {
@@ -640,6 +678,13 @@ final class MainWindowControllerTests: XCTestCase {
             canvasScale: 1,
             pointerIsActive: false
         ))
+        XCTAssertFalse(MainWindowController.shouldDisplayFilmstripOverlay(
+            isEnabled: true,
+            hasLoadedImage: true,
+            canvasScale: 1,
+            pointerIsActive: true,
+            isCropping: true
+        ))
     }
 
     func testFilmstripDoesNotScheduleAutoHideWhilePointerIsOverOverlay() {
@@ -676,6 +721,37 @@ final class MainWindowControllerTests: XCTestCase {
             ),
             .init(previous: true, next: false)
         )
+    }
+
+    func testNavigationMenuValidationTracksSequenceBoundaries() async throws {
+        let fixture = try makeFolderNavigationFixture(itemNames: ["first.png", "second.png"])
+        defer { try? FileManager.default.removeItem(at: fixture.folder) }
+        await fixture.controller.openFolderForTesting(fixture.folder, scannerItems: fixture.items)
+        fixture.controller.openFirstFolderBrowserItemForTesting()
+        for _ in 0..<100 where fixture.controller.viewerNavigationURLsForTesting.count != 2 {
+            await Task.yield()
+        }
+        let previous = NSMenuItem(
+            title: "Previous",
+            action: #selector(MainWindowController.showPreviousImage(_:)),
+            keyEquivalent: ""
+        )
+        let next = NSMenuItem(
+            title: "Next",
+            action: #selector(MainWindowController.showNextImage(_:)),
+            keyEquivalent: ""
+        )
+
+        XCTAssertFalse(fixture.controller.validateMenuItem(previous))
+        XCTAssertTrue(fixture.controller.validateMenuItem(next))
+
+        fixture.controller.showNextImage(nil)
+        for _ in 0..<100 where fixture.controller.viewerNavigationURLForTesting != fixture.items[1].url {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(fixture.controller.validateMenuItem(previous))
+        XCTAssertFalse(fixture.controller.validateMenuItem(next))
     }
 
     func testPageControlsStayVisibleWhileHovered() {

@@ -21,6 +21,22 @@ final class PageNavigationOverlayViewTests: XCTestCase {
         XCTAssertTrue(view.debugNextButton.isEnabled)
     }
 
+    func testButtonsProvideHoverAndPressedFeedback() {
+        let view = PageNavigationOverlayView(frame: NSRect(x: 0, y: 0, width: 500, height: 320))
+        view.layoutSubtreeIfNeeded()
+        let button = view.debugNextButton
+
+        button.setHoveredForTesting(true)
+        XCTAssertTrue(button.testingShowsHover)
+
+        button.highlight(true)
+        XCTAssertTrue(button.testingShowsPressed)
+
+        button.isEnabled = false
+        XCTAssertFalse(button.testingShowsHover)
+        XCTAssertFalse(button.testingShowsPressed)
+    }
+
     func testButtonsCallNavigationCallbacks() {
         let view = PageNavigationOverlayView()
         var previousCount = 0
@@ -33,6 +49,20 @@ final class PageNavigationOverlayViewTests: XCTestCase {
 
         XCTAssertEqual(previousCount, 1)
         XCTAssertEqual(nextCount, 1)
+    }
+
+    func testHitTestingRoutesOnlyVisibleButtonBounds() {
+        let view = PageNavigationOverlayView(frame: NSRect(x: 0, y: 0, width: 500, height: 320))
+        view.layoutSubtreeIfNeeded()
+
+        let previousButton = view.debugPreviousButton
+        let previousCenter = view.convert(
+            NSPoint(x: previousButton.bounds.midX, y: previousButton.bounds.midY),
+            from: previousButton
+        )
+
+        XCTAssertIdentical(view.hitTest(previousCenter), previousButton)
+        XCTAssertNil(view.hitTest(NSPoint(x: view.bounds.midX, y: view.bounds.midY)))
     }
 
     func testOverlayUsesAppearanceAdaptiveBorderAndBackground() {

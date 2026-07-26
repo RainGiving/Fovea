@@ -809,6 +809,39 @@ final class FolderBrowserViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isOperating)
     }
 
+    func testStaleTrashResultPublishesMutationWithoutPollutingReplacementSession() async {
+        let folderA = URL(fileURLWithPath: "/tmp/trash-session-a", isDirectory: true)
+        let folderB = URL(fileURLWithPath: "/tmp/trash-session-b", isDirectory: true)
+        let itemA = ImageItem(url: folderA.appendingPathComponent("a.png"), format: .png)
+        let itemB = ImageItem(url: folderB.appendingPathComponent("b.png"), format: .png)
+        let gate = BlockingBatchOperation(result: BatchOperationResult(succeeded: [itemA.url]))
+        let mutations = LockedValue<[FolderItemURLMutation]>([])
+        let viewModel = FolderBrowserViewModel(
+            scanFolder: { folder in folder == folderA ? [itemA] : [itemB] },
+            moveToTrash: { _ in gate.run() }
+        )
+        viewModel.onItemURLMutation = { mutation in
+            mutations.withValue { $0.append(mutation) }
+        }
+        await viewModel.openFolder(folderA)
+        viewModel.setSelection([itemA.id])
+
+        let trashTask = viewModel.moveSelectedToTrash()
+        await gate.waitUntilStarted()
+        await viewModel.openFolder(folderB)
+        gate.finish()
+        await trashTask?.value
+
+        XCTAssertEqual(mutations.value, [.removed([itemA.url])])
+        XCTAssertEqual(viewModel.session?.folderURL, folderB)
+        XCTAssertEqual(viewModel.visibleItems, [itemB])
+        XCTAssertTrue(viewModel.selectedItems.isEmpty)
+        XCTAssertTrue(viewModel.operationFailures.isEmpty)
+        XCTAssertTrue(viewModel.operationRecoveryFailures.isEmpty)
+        XCTAssertNil(viewModel.operationMessage)
+        XCTAssertFalse(viewModel.isOperating)
+    }
+
     func testMoveSelectedToTrashSetsOperatingWhileBackgroundOperationRunsAndClearsAfterResult() async {
         let folder = URL(fileURLWithPath: "/tmp/photos", isDirectory: true)
         let item = ImageItem(url: folder.appendingPathComponent("one.png"), format: .png)

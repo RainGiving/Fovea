@@ -636,7 +636,10 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.displayTitle, "editable.png")
 
         viewModel.applyEdit(.mirrorHorizontal)
-        XCTAssertEqual(viewModel.displayTitle, "editable.png - Edited")
+        XCTAssertEqual(
+            viewModel.displayTitle,
+            String(format: AppStrings.text("viewer.title.edited"), "editable.png")
+        )
 
         XCTAssertTrue(viewModel.discardCurrentEdits())
         XCTAssertEqual(viewModel.displayTitle, "editable.png")
@@ -648,8 +651,20 @@ final class ViewerViewModelTests: XCTestCase {
             "image.png"
         )
         XCTAssertEqual(
-            ViewerViewModel.displayTitle(filename: "image.png", hasUnsavedEdits: true),
-            "image.png - Edited"
+            ViewerViewModel.displayTitle(
+                filename: "image.png",
+                hasUnsavedEdits: true,
+                preferredLanguages: ["en"]
+            ),
+            "image.png — Edited"
+        )
+        XCTAssertEqual(
+            ViewerViewModel.displayTitle(
+                filename: "image.png",
+                hasUnsavedEdits: true,
+                preferredLanguages: ["zh-Hans"]
+            ),
+            "image.png — 已编辑"
         )
     }
 
@@ -712,6 +727,34 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.currentImage)
         XCTAssertNil(viewModel.currentMetadata)
         XCTAssertEqual(viewModel.errorMessage, "图片损坏或无法解码：navigation-2-broken.png")
+    }
+
+    func testSuccessfulNavigationClearsEarlierDecodeFailure() async throws {
+        let goodURL = URL(fileURLWithPath: "/tmp/navigation-a-good.png")
+        let brokenURL = URL(fileURLWithPath: "/tmp/navigation-b-broken.png")
+        let image = try makeDecodedImage(width: 4, height: 3)
+        let viewModel = ViewerViewModel(
+            scanContainingDirectory: { _ in [
+                ImageItem(url: goodURL, format: .png),
+                ImageItem(url: brokenURL, format: .png)
+            ] },
+            decodeImageAtURL: { url, _ in
+                guard url == goodURL else { throw ImageDecodeError.cannotDecodeImage }
+                return image
+            },
+            loadPreviewAtURL: { _, _ in image }
+        )
+        await viewModel.open(url: goodURL)
+
+        viewModel.showNext()
+        await waitUntil { viewModel.loadPhase == .failed }
+        XCTAssertNotNil(viewModel.errorMessage)
+
+        viewModel.showPrevious()
+        await waitUntil { viewModel.loadPhase == .full }
+
+        XCTAssertEqual(viewModel.navigationState?.currentItem?.url, goodURL)
+        XCTAssertNil(viewModel.errorMessage)
     }
 
     func testMoveCurrentToTrashClearsDisplayedImageWhenLastItemIsRemoved() async throws {
@@ -873,6 +916,33 @@ final class ViewerViewModelTests: XCTestCase {
         await waitUntil { viewModel.currentImage?.pixelSize == CGSize(width: 7, height: 5) }
         XCTAssertEqual(viewModel.currentImage?.pixelSize, CGSize(width: 7, height: 5))
         XCTAssertEqual(viewModel.errorMessage, "文件已在外部移除：a.png")
+    }
+
+    func testRefreshPreservesUnsavedEditsWhenCurrentFileWasDeletedExternally() async throws {
+        let url = URL(fileURLWithPath: "/tmp/externally-deleted-edited.png")
+        let original = try makeDecodedImage(width: 6, height: 4)
+        let versions = FileVersionSequence(values: [url: [FileVersionSequence.initial, nil]])
+        let viewModel = ViewerViewModel(
+            scanContainingDirectory: { _ in [ImageItem(url: url, format: .png)] },
+            decodeImageAtURL: { _, _ in original },
+            currentFileVersionAtURL: versions.value(for:)
+        )
+        await viewModel.open(url: url)
+        viewModel.applyEdit(.rotateClockwise)
+
+        await viewModel.refreshCurrentFileIfNeeded()
+
+        XCTAssertEqual(viewModel.navigationState?.currentItem?.url, url)
+        XCTAssertEqual(viewModel.currentImage?.pixelSize, CGSize(width: 4, height: 6))
+        XCTAssertTrue(viewModel.hasUnsavedEdits)
+        XCTAssertEqual(viewModel.loadPhase, .full)
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(
+                format: AppStrings.text("viewer.error.externallyRemovedWithUnsavedEdits"),
+                url.lastPathComponent
+            )
+        )
     }
 
     func testRefreshReloadsCurrentImageWhenExternalVersionChanges() async throws {

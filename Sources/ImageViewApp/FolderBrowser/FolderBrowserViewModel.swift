@@ -223,7 +223,9 @@ final class FolderBrowserViewModel: ObservableObject {
 
     @discardableResult
     func undoLastBatchOperation() -> Task<Void, Never>? {
-        guard !isOperating, let undo = lastBatchUndo else { return nil }
+        guard !isOperating,
+              let undo = lastBatchUndo,
+              let operationContext = currentFolderOperationContext else { return nil }
         clearBatchUndo()
 
         switch undo {
@@ -236,7 +238,8 @@ final class FolderBrowserViewModel: ObservableObject {
             return runBatchOperation {
                 operation(reversePlan)
             } apply: { [weak self] result in
-                self?.applyMoveUndoResult(result, reversePlan: reversePlan)
+                guard let self, self.isCurrent(operationContext) else { return }
+                self.applyMoveUndoResult(result, reversePlan: reversePlan)
             }
         case .rename(let proposals):
             let reversePlan = BatchRenamePlan(
@@ -251,6 +254,7 @@ final class FolderBrowserViewModel: ObservableObject {
             } apply: { [weak self] result in
                 guard let self else { return }
                 self.publishRenameMutation(for: result, plan: reversePlan)
+                guard self.isCurrent(operationContext) else { return }
                 self.applyRenameResult(result, plan: reversePlan)
             }
         }
@@ -311,10 +315,30 @@ final class FolderBrowserViewModel: ObservableObject {
     }
 
     @discardableResult
+    private func applyRemovalOperationResult(
+        _ result: BatchOperationResult,
+        context: FolderOperationContext
+    ) -> Bool {
+        guard isCurrent(context) else {
+            let succeededURLs = Set(result.succeeded)
+            if !succeededURLs.isEmpty {
+                onItemURLMutation?(.removed(succeededURLs))
+            }
+            if !result.recoveryFailures.isEmpty {
+                onRecoveryRequired?(context.folderURL, result.recoveryFailures)
+            }
+            return false
+        }
+        applyOperationResult(result, removingSucceeded: true)
+        return true
+    }
+
+    @discardableResult
     func moveSelectedToTrash() -> Task<Void, Never>? {
         guard !isOperating else { return nil }
         let urls = selectedItems.map(\.url)
-        guard !urls.isEmpty else { return nil }
+        guard !urls.isEmpty,
+              let operationContext = currentFolderOperationContext else { return nil }
         if usesDefaultMoveToTrash {
             return runProgressiveBatchOperation(
                 total: urls.count,
@@ -326,14 +350,14 @@ final class FolderBrowserViewModel: ObservableObject {
                     progress: report
                 )
             } apply: { [weak self] result in
-                self?.applyOperationResult(result, removingSucceeded: true)
+                self?.applyRemovalOperationResult(result, context: operationContext)
             }
         }
         let operation = moveToTrashOperation
         return runBatchOperation {
             operation(urls)
         } apply: { [weak self] result in
-            self?.applyOperationResult(result, removingSucceeded: true)
+            self?.applyRemovalOperationResult(result, context: operationContext)
         }
     }
 
@@ -341,7 +365,8 @@ final class FolderBrowserViewModel: ObservableObject {
     func moveSelected(to destinationFolder: URL, conflictPolicy: MoveConflictPolicy) -> Task<Void, Never>? {
         guard !isOperating else { return nil }
         let urls = selectedItems.map(\.url)
-        guard !urls.isEmpty else { return nil }
+        guard !urls.isEmpty,
+              let operationContext = currentFolderOperationContext else { return nil }
         if usesDefaultMoveToFolder {
             return runProgressiveBatchOperation(
                 total: urls.count,
@@ -355,14 +380,14 @@ final class FolderBrowserViewModel: ObservableObject {
                     progress: report
                 )
             } apply: { [weak self] result in
-                self?.applyOperationResult(result, removingSucceeded: true)
+                self?.applyRemovalOperationResult(result, context: operationContext)
             }
         }
         let operation = moveToFolderOperation
         return runBatchOperation {
             operation(urls, destinationFolder, conflictPolicy)
         } apply: { [weak self] result in
-            self?.applyOperationResult(result, removingSucceeded: true)
+            self?.applyRemovalOperationResult(result, context: operationContext)
         }
     }
 
@@ -375,7 +400,8 @@ final class FolderBrowserViewModel: ObservableObject {
 
     @discardableResult
     func executeMovePlan(_ plan: BatchMovePlan) -> Task<Void, Never>? {
-        guard !isOperating else { return nil }
+        guard !isOperating,
+              let operationContext = currentFolderOperationContext else { return nil }
         if usesDefaultExecuteMovePlan {
             return runProgressiveBatchOperation(
                 total: plan.proposals.count + plan.failures.count,
@@ -387,16 +413,18 @@ final class FolderBrowserViewModel: ObservableObject {
                     progress: report
                 )
             } apply: { [weak self] result in
-                self?.applyOperationResult(result, removingSucceeded: true)
-                self?.recordMoveUndoIfSafe(result: result, plan: plan)
+                guard let self,
+                      self.applyRemovalOperationResult(result, context: operationContext) else { return }
+                self.recordMoveUndoIfSafe(result: result, plan: plan)
             }
         }
         let operation = executeMovePlanOperation
         return runBatchOperation {
             operation(plan)
         } apply: { [weak self] result in
-            self?.applyOperationResult(result, removingSucceeded: true)
-            self?.recordMoveUndoIfSafe(result: result, plan: plan)
+            guard let self,
+                  self.applyRemovalOperationResult(result, context: operationContext) else { return }
+            self.recordMoveUndoIfSafe(result: result, plan: plan)
         }
     }
 
@@ -596,6 +624,15 @@ final class FolderBrowserViewModel: ObservableObject {
     private func reconcileSelection() {
         let visibleIDs = Set(visibleItems.map(\.id))
         setSelection(selectedItemIDs.filter { visibleIDs.contains($0) })
+    }
+
+    private var currentFolderOperationContext: FolderOperationContext? {
+        guard let folderURL = session?.folderURL else { return nil }
+        return FolderOperationContext(sessionGeneration: sessionGeneration, folderURL: folderURL)
+    }
+
+    private func isCurrent(_ context: FolderOperationContext) -> Bool {
+        sessionGeneration == context.sessionGeneration && session?.folderURL == context.folderURL
     }
 
     private func message(for result: BatchOperationResult) -> String? {
@@ -817,4 +854,9 @@ private enum RenameRescanOutcome: Sendable {
 private enum FolderBatchUndo {
     case move([BatchMoveProposal])
     case rename([RenameProposal])
+}
+
+private struct FolderOperationContext {
+    let sessionGeneration: UInt64
+    let folderURL: URL
 }
