@@ -4,6 +4,9 @@
 "menu.edit.redo" = "重做编辑";
 "menu.edit.undoNamed" = "撤销%@";
 "menu.edit.redoNamed" = "重做%@";
+"contextMenu.copyImage" = "复制图片";
+"contextMenu.copyFile" = "拷贝文件";
+"contextMenu.openWith" = "打开方式";
 "editing.operation.rotateClockwise" = "顺时针旋转";
 "editing.operation.rotateCounterClockwise" = "逆时针旋转";
 "editing.operation.mirrorHorizontal" = "水平翻转";

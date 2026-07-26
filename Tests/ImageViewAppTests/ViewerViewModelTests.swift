@@ -1308,6 +1308,53 @@ final class ViewerViewModelTests: XCTestCase {
         return bytes
     }
 
+    func testCopyingDoesNothingBeforeAnImageIsOpen() {
+        let viewModel = ViewerViewModel()
+        let pasteboard = makeScratchPasteboard()
+
+        XCTAssertFalse(viewModel.copyCurrentImageToPasteboard(pasteboard))
+        XCTAssertFalse(viewModel.copyCurrentFileToPasteboard(pasteboard))
+        XCTAssertTrue(viewModel.applicationURLsForCurrentImage().isEmpty)
+    }
+
+    func testCopyingTheImageCarriesUnsavedEditsRatherThanTheOriginalPixels() async throws {
+        let imageURL = try makeTemporaryPNG(width: 6, height: 4, name: "copy-source")
+        defer { try? FileManager.default.removeItem(at: imageURL.deletingLastPathComponent()) }
+        let viewModel = ViewerViewModel()
+        await viewModel.open(url: imageURL)
+        viewModel.applyEdit(.rotateClockwise)
+
+        let pasteboard = makeScratchPasteboard()
+        XCTAssertTrue(viewModel.copyCurrentImageToPasteboard(pasteboard))
+
+        let pasted = try XCTUnwrap(NSImage(pasteboard: pasteboard))
+        let representation = try XCTUnwrap(pasted.representations.first)
+        XCTAssertEqual(representation.pixelsWide, 4)
+        XCTAssertEqual(representation.pixelsHigh, 6)
+    }
+
+    func testCopyingTheFileWritesTheCurrentItemURL() async throws {
+        let imageURL = try makeTemporaryPNG(width: 3, height: 3, name: "copy-file")
+        defer { try? FileManager.default.removeItem(at: imageURL.deletingLastPathComponent()) }
+        let viewModel = ViewerViewModel()
+        await viewModel.open(url: imageURL)
+
+        let pasteboard = makeScratchPasteboard()
+        XCTAssertTrue(viewModel.copyCurrentFileToPasteboard(pasteboard))
+
+        let pasted = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL]
+        XCTAssertEqual(pasted?.map(\.standardizedFileURL), [imageURL.standardizedFileURL])
+    }
+
+    private func makeScratchPasteboard() -> NSPasteboard {
+        let name = "ViewerViewModelTests.\(UUID().uuidString)"
+        addTeardownBlock { NSPasteboard(name: NSPasteboard.Name(name)).releaseGlobally() }
+        return NSPasteboard(name: NSPasteboard.Name(name))
+    }
+
     private func makeTemporaryPNG(width: Int, height: Int, name: String) throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

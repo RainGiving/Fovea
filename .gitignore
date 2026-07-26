@@ -7,3 +7,4 @@ DerivedData/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.app/
 .DS_Store
+by_claude/

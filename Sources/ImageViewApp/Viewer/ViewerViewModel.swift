@@ -608,6 +608,29 @@ final class ViewerViewModel: ObservableObject {
         NSPasteboard.general.setString(fileActions.absolutePath(for: url), forType: .string)
     }
 
+    /// 复制当前显示的画面，包含尚未保存的旋转、镜像和裁剪。
+    @discardableResult
+    func copyCurrentImageToPasteboard(_ pasteboard: NSPasteboard = .general) -> Bool {
+        guard let image = currentImage?.cgImage else { return false }
+        return fileActions.copyImage(image, to: pasteboard)
+    }
+
+    @discardableResult
+    func copyCurrentFileToPasteboard(_ pasteboard: NSPasteboard = .general) -> Bool {
+        guard let url = navigationState?.currentItem?.url else { return false }
+        return fileActions.copyFile(url, to: pasteboard)
+    }
+
+    func applicationURLsForCurrentImage() -> [URL] {
+        guard let url = navigationState?.currentItem?.url else { return [] }
+        return fileActions.applicationURLs(toOpen: url)
+    }
+
+    func openCurrentImage(withApplicationAt applicationURL: URL) {
+        guard let url = navigationState?.currentItem?.url else { return }
+        fileActions.open(url, withApplicationAt: applicationURL)
+    }
+
     func continuousReadingPages(
         centeredAt focusedItemID: ImageItem.ID? = nil,
         radius: Int = ContinuousReadingView.preloadRadius

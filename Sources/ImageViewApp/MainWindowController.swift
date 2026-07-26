@@ -49,6 +49,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var onWindowDidClose: ((MainWindowController) -> Void)?
     enum MenuCommand: Equatable {
         case fileOperationRequiringCurrentItem
+        case copyImage
         case navigation
         case canvasSizing
         case startCropping
@@ -488,6 +489,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
 
         canvas.onNext = { [weak self] in self?.navigateToNextImage() }
         canvas.onPrevious = { [weak self] in self?.navigateToPreviousImage() }
+        canvas.onContextMenuRequested = { [weak self] in self?.makeImageContextMenu() }
+        continuousReadingView.onContextMenuRequested = { [weak self] in self?.makeImageContextMenu() }
         continuousReadingView.onFocusedItemChanged = { [weak self] itemID in
             guard let self else { return }
             self.continuousReadingFocusID = itemID
@@ -791,6 +794,28 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
 
     @objc func copyCurrentImagePath(_ sender: Any?) {
         viewModel.copyCurrentPathToPasteboard()
+    }
+
+    @objc func copyCurrentImage(_ sender: Any?) {
+        viewModel.copyCurrentImageToPasteboard()
+    }
+
+    @objc func copyCurrentImageFile(_ sender: Any?) {
+        viewModel.copyCurrentFileToPasteboard()
+    }
+
+    @objc func openCurrentImageWithApplication(_ sender: Any?) {
+        guard let applicationURL = (sender as? NSMenuItem)?.representedObject as? URL else { return }
+        viewModel.openCurrentImage(withApplicationAt: applicationURL)
+    }
+
+    /// 每次右击都重建菜单，「打开方式」的候选应用随当前文件的格式变化。
+    func makeImageContextMenu() -> NSMenu? {
+        guard !isFolderBrowserMode, viewModel.navigationState?.currentItem != nil else { return nil }
+        return ImageContextMenuBuilder.makeMenu(
+            target: self,
+            openWithApplications: viewModel.applicationURLsForCurrentImage()
+        )
     }
 
     @objc func moveCurrentImageToTrash(_ sender: Any?) {
@@ -1520,8 +1545,12 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         case #selector(renameCurrentImage(_:)),
              #selector(revealCurrentImageInFinder(_:)),
              #selector(copyCurrentImagePath(_:)),
+             #selector(copyCurrentImageFile(_:)),
+             #selector(openCurrentImageWithApplication(_:)),
              #selector(moveCurrentImageToTrash(_:)):
             return .fileOperationRequiringCurrentItem
+        case #selector(copyCurrentImage(_:)):
+            return .copyImage
         case #selector(showPreviousImage(_:)), #selector(showNextImage(_:)):
             return .navigation
         case #selector(actualSize(_:)), #selector(zoomToFit(_:)), #selector(zoomToFitWidth(_:)):
@@ -1566,6 +1595,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         switch command {
         case .fileOperationRequiringCurrentItem:
             return hasCurrentItem
+        case .copyImage:
+            return hasCurrentImage
         case .navigation:
             return hasCurrentItem
         case .canvasSizing:
@@ -2082,7 +2113,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
-    private static func menuItem(in menu: NSMenu?, matching action: Selector) -> NSMenuItem? {
+    static func menuItem(in menu: NSMenu?, matching action: Selector) -> NSMenuItem? {
         guard let menu else { return nil }
         for item in menu.items {
             if item.action == action { return item }
@@ -2341,6 +2372,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var isFolderBrowserVisibleForTesting: Bool { !folderBrowserView.isHidden }
     var folderBrowserIsOperatingForTesting: Bool { folderBrowserViewModel.isOperating }
     var isCanvasVisibleForTesting: Bool { !canvas.isHidden }
+    var canvasForTesting: ImageCanvasView { canvas }
+    var continuousReadingViewForTesting: ContinuousReadingView { continuousReadingView }
     var isFullScreenChromeVisibleForTesting: Bool {
         !titleBarView.isHidden && !bottomBarView.isHidden
     }

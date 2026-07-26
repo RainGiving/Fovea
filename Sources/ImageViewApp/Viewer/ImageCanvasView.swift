@@ -20,6 +20,7 @@ final class ImageCanvasView: NSView {
     var onNext: (() -> Void)?
     var onPrevious: (() -> Void)?
     var onTransformChanged: ((CGFloat) -> Void)?
+    var onContextMenuRequested: (() -> NSMenu?)?
     private var lastDragLocation: CGPoint?
     private var trackpadScrollAxis: TrackpadScrollAxis?
     private var accumulatedTrackpadDeltaX: CGFloat = 0
@@ -329,6 +330,11 @@ final class ImageCanvasView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         endMouseDrag()
+    }
+
+    /// 用 `menu(for:)` 而非 `rightMouseDown`，control 点击和触控板双指点按都会走到这里。
+    override func menu(for event: NSEvent) -> NSMenu? {
+        onContextMenuRequested?() ?? super.menu(for: event)
     }
 
     override func scrollWheel(with event: NSEvent) {

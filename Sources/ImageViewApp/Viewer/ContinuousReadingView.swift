@@ -19,7 +19,11 @@ final class ContinuousReadingView: NSView {
     private var isApplyingPages = false
 
     var onFocusedItemChanged: ((ImageItem.ID) -> Void)?
+    var onContextMenuRequested: (() -> NSMenu?)? {
+        didSet { document.onContextMenuRequested = onContextMenuRequested }
+    }
 
+    var documentViewForTesting: NSView { document }
     var testingPageCount: Int { document.pages.count }
     var testingDecodedPageCount: Int { document.pages.filter { $0.image != nil }.count }
     var testingPageURLs: [URL] { document.pages.map { $0.item.url } }
@@ -124,6 +128,13 @@ private final class ContinuousReadingClipView: NSClipView {
 }
 
 private final class ContinuousReadingDocumentView: NSView {
+    var onContextMenuRequested: (() -> NSMenu?)?
+
+    /// 右击落在文档视图上，直接在这里给出菜单，不依赖响应链继续向上冒泡。
+    override func menu(for event: NSEvent) -> NSMenu? {
+        onContextMenuRequested?() ?? super.menu(for: event)
+    }
+
     var pages: [ContinuousReadingPage] = [] {
         didSet {
             itemIndexByID = Dictionary(
