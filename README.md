@@ -22,7 +22,7 @@ ImageView 是一款原生 macOS 图片浏览器，面向快速打开、同目录
 
 ## 系统要求
 
-- macOS 14.0 或更高版本。
+- macOS 26.0 或更高版本。
 - 从源码构建需要 Swift 6 工具链。
 
 ## 开发
@@ -64,12 +64,6 @@ scripts/run-memory-benchmarks.sh
 - [多图片窗口设计](docs/superpowers/specs/2026-07-11-multiple-image-windows-design.md)
 - [辅助功能发布检查](docs/qa/2026-07-15-accessibility-validation.md)
 - [内存基准示例](docs/assets/performance/memory-baseline-2026-07-15-113013.md)
-
-## Support
-
-ImageView is open source and free to use. If it helps you, you can support the project via Alipay:
-
-<img src="docs/assets/alipay-qr.jpg" alt="Alipay donation QR code" width="220">
 
 ## 开源许可
 

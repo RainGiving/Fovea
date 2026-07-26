@@ -1,10 +1,10 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "ImageView",
     defaultLocalization: "en",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v26)],
     products: [
         .library(name: "ImageViewCore", targets: ["ImageViewCore"]),
         .executable(name: "ImageView", targets: ["ImageViewApp"])
