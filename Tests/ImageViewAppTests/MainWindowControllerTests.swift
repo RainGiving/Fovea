@@ -1369,7 +1369,88 @@ final class MainWindowControllerTests: XCTestCase {
         XCTAssertTrue(controller.isFolderBrowserVisibleForTesting)
     }
 
-    func testTitleBarGridButtonOpensCurrentImageFolderWithoutChangingWindowTitle() async throws {
+    /// 按下网格按钮的那一帧界面就该是对的。
+    ///
+    /// 以前标题、按钮可用性都要等异步的文件夹会话落地才被顺带纠正，中间这段
+    /// 窗口期里编辑按钮还亮着，点下去裁切框就压到缩略图上了。
+    func testEnteringGridUpdatesTitleAndControlsInTheSameFrame() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("one.png")
+        try writeTestPNG(to: imageURL)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.canEditCurrentImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(controller.titleBarEditButtonForTesting.isEnabled)
+
+        controller.performTitleBarGridToggleForTesting()
+
+        // 不等任何异步结果，就地检查这一帧。
+        XCTAssertTrue(controller.isFolderBrowserVisibleForTesting)
+        XCTAssertEqual(controller.window?.title, root.lastPathComponent)
+        XCTAssertFalse(controller.titleBarEditButtonForTesting.isEnabled)
+        XCTAssertFalse(controller.titleBarFilmstripButtonForTesting.isEnabled)
+        XCTAssertFalse(controller.titleBarContinuousReadingButtonForTesting.isEnabled)
+    }
+
+    /// 网格里进不了编辑，走哪条路都一样。守卫在动作自己身上，不靠按钮状态。
+    func testEditingIsRefusedInGridMode() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("one.png")
+        try writeTestPNG(to: imageURL)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.canEditCurrentImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.openFolderForTesting(root, items: [ImageItem(url: imageURL, format: .png)])
+
+        controller.startEditingImage(nil)
+
+        XCTAssertFalse(controller.isCroppingForTesting, "网格里没有「当前这一张」可裁")
+        XCTAssertFalse(controller.isEditControlsVisibleForTesting)
+        let editItem = NSMenuItem(
+            title: "Edit",
+            action: #selector(MainWindowController.startEditingImage(_:)),
+            keyEquivalent: ""
+        )
+        XCTAssertFalse(controller.validateMenuItem(editItem))
+    }
+
+    /// 编辑中切到网格，编辑状态要一起收干净，不能只是把裁切框藏起来。
+    func testSwitchingToGridWhileEditingLeavesEditMode() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("one.png")
+        try writeTestPNG(to: imageURL)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.startEditingImage(nil)
+        XCTAssertTrue(controller.isEditingImage)
+
+        controller.openFolderForTesting(root, items: [ImageItem(url: imageURL, format: .png)])
+
+        XCTAssertFalse(controller.isEditingImage)
+        XCTAssertFalse(controller.isCroppingForTesting)
+        XCTAssertFalse(controller.isEditControlsVisibleForTesting)
+        XCTAssertFalse(controller.titleBarEditButtonForTesting.isOnState)
+    }
+
+    /// 网格里没有「当前这一张」，标题给目录名。
+    ///
+    /// 这里原来断言标题保持图片名不变，那正是要修的混乱：进了网格顶上还挂着
+    /// 刚才那张图的文件名，点别的缩略图也不会变。
+    func testTitleBarGridButtonShowsTheFolderNameInTheTitle() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -1380,14 +1461,18 @@ final class MainWindowControllerTests: XCTestCase {
         for _ in 0..<100 where controller.window?.title == "ImageView" {
             try await Task.sleep(for: .milliseconds(10))
         }
-        let title = controller.window?.title
+        XCTAssertEqual(controller.window?.title, "one.png")
 
         controller.performTitleBarBrowseCurrentFolderForTesting(items: [
             ImageItem(url: imageURL, format: .png)
         ])
 
         XCTAssertTrue(controller.isFolderBrowserVisibleForTesting)
-        XCTAssertEqual(controller.window?.title, title)
+        XCTAssertEqual(controller.window?.title, root.lastPathComponent)
+
+        // 回到单图，标题跟着回到文件名。
+        controller.openFirstFolderBrowserItemForTesting()
+        XCTAssertEqual(controller.window?.title, "one.png")
     }
 
     func testGridButtonTogglesBackToLiveViewerWithoutRescanning() async throws {

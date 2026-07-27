@@ -450,4 +450,26 @@ private extension ThumbnailProvider {
             return {}
         })
     }
+
+    /// 没有批量操作时，计数和网格之间只留正常间距。
+    ///
+    /// 操作状态和进度这两行原来用约束串在中间，藏起来照样占位，
+    /// 顶栏和网格之间白掉五十点。
+    func testHiddenOperationRowsDoNotReserveSpaceAboveTheGrid() {
+        let view = FolderBrowserView()
+        view.frame = NSRect(x: 0, y: 0, width: 1_100, height: 700)
+        view.applyItems([])
+        view.applyCounts(total: 63, visible: 63, selected: 1)
+
+        let idleSpacing = view.testingCountToGridSpacing
+        XCTAssertEqual(idleSpacing, 8, accuracy: 0.5)
+
+        view.applyOperationStatus(message: "移动中", failures: [], isOperating: true)
+
+        XCTAssertGreaterThan(
+            view.testingCountToGridSpacing,
+            idleSpacing,
+            "有状态要显示时这一行才占位置"
+        )
+    }
 }

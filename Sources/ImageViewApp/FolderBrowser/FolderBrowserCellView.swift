@@ -4,7 +4,10 @@ import ImageViewCore
 final class FolderBrowserCellView: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("FolderBrowserCellView")
 
-    private let thumbnailView = NSImageView()
+    /// 缩略图区域取正方形，横图竖图的视觉分量才一样。
+    static let thumbnailHeight: CGFloat = 132
+
+    private let thumbnailView = ThumbnailTileView()
     private let filenameField = NSTextField(labelWithString: "")
     private var thumbnailRequest: ThumbnailRequest?
     private var accessibilityPosition: Int?
@@ -42,10 +45,6 @@ final class FolderBrowserCellView: NSCollectionViewItem {
         view.translatesAutoresizingMaskIntoConstraints = false
 
         thumbnailView.translatesAutoresizingMaskIntoConstraints = false
-        thumbnailView.imageScaling = .scaleProportionallyUpOrDown
-        thumbnailView.wantsLayer = true
-        thumbnailView.layer?.cornerRadius = 8
-        thumbnailView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
 
         filenameField.translatesAutoresizingMaskIntoConstraints = false
         filenameField.alignment = .center
@@ -60,7 +59,7 @@ final class FolderBrowserCellView: NSCollectionViewItem {
             thumbnailView.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
             thumbnailView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
             thumbnailView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-            thumbnailView.heightAnchor.constraint(equalToConstant: 118),
+            thumbnailView.heightAnchor.constraint(equalToConstant: FolderBrowserCellView.thumbnailHeight),
 
             filenameField.topAnchor.constraint(equalTo: thumbnailView.bottomAnchor, constant: 6),
             filenameField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 6),
@@ -181,6 +180,66 @@ final class FolderBrowserCellView: NSCollectionViewItem {
         view.setAccessibilityRole(.button)
         view.setAccessibilityLabel(parts.joined(separator: ", "))
         view.setAccessibilitySelected(isSelected)
+    }
+}
+
+/// 一格缩略图。图片按比例居中画出来，四周不铺底板。
+///
+/// 原来是一块白底的 NSImageView 装着图片，比例对不上的地方就露出白边：
+/// 横图上下白、竖图左右白，每格白板的形状还各不相同。现在只画图片本身，
+/// 圆角和描边贴着图片的边走，网格底色直接透上来。
+final class ThumbnailTileView: NSView {
+    static let cornerRadius: CGFloat = 6
+
+    var image: NSImage? {
+        didSet { needsDisplay = true }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    /// 图片按比例铺进这块区域之后实际占的位置。
+    static func fittedRect(imageSize: CGSize, in bounds: CGRect) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0,
+              bounds.width > 0, bounds.height > 0 else { return .zero }
+        let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
+        let size = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        return CGRect(
+            x: bounds.midX - size.width / 2,
+            y: bounds.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        ).integral
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let image, image.size.width > 0, image.size.height > 0 else { return }
+        let rect = Self.fittedRect(imageSize: image.size, in: bounds)
+        guard rect.width > 1, rect.height > 1 else { return }
+
+        let path = NSBezierPath(roundedRect: rect, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius)
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        image.draw(
+            in: rect,
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1,
+            respectFlipped: true,
+            hints: [.interpolation: NSImageInterpolation.high]
+        )
+        NSGraphicsContext.restoreGraphicsState()
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            NSColor.separatorColor.setStroke()
+        }
+        path.lineWidth = 1
+        path.stroke()
     }
 }
 

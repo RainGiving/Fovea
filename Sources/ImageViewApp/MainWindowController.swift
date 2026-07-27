@@ -236,20 +236,39 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private var fullScreenChromeHideTimer: Timer?
     private var lastAnnouncedLoadedURL: URL?
     private var folderRetryGeneration: UInt64 = 0
-    private var isFolderBrowserMode = false
+    /// 路由停在文件夹上。这是输入，界面到底是不是网格看 `presentation.mode`。
+    private var isBrowsingFolder = false
     /// 全屏里 chrome 会自动收起，重算图片内边距时要知道当下是收着还是展开。
     private var isChromeVisible = true
+    /// 当前生效的一整套界面状态。改状态的地方只改状态，末尾统一调
+    /// `refreshPresentation()` 重算，由 `apply` 把差异贴到视图上。
+    private var presentation = WindowPresentation.initial
+    /// 从 viewModel 抄过来的一份快照。
+    ///
+    /// `@Published` 在 willSet 时发布，订阅里回头读 viewModel 拿到的是旧值。
+    /// 界面状态一律按这份快照算，订阅只负责把新值写进来。
+    private var hasImage = false
+    private var imageLoadPhase: ImageLoadPhase = .empty
+    private var hasLoadError = false
+    private var canEditImage = false
+    private var navigationItemCount = 0
+    private var viewerTitle = "ImageView"
+    /// 文件夹会话的快照，同样是因为 `@Published` 在 willSet 时发布。
+    private var folderRouteState: FolderRouteState?
+    /// 网格模式。它是算出来的，不再是一个可以被单独改写的开关。
+    private var isFolderBrowserMode: Bool { presentation.mode == .grid }
     /// 胶卷条当前高亮的条目，跟着画布上显示的那张走。
     private var filmstripHighlightID: ImageItem.ID?
     private var currentFolderBrowserItems: [ImageItem] = []
+    /// 路由只管「回退前进到哪」和「标题指向哪」，界面长什么样看 `presentation`。
     private var currentRoute: ContentRoute? {
-        didSet { updateTitleBarControlAvailability() }
+        didSet { refreshPresentation() }
     }
     private var backRoute: ContentRoute? {
-        didSet { updateTitleBarControlAvailability() }
+        didSet { refreshPresentation() }
     }
     private var forwardRoute: ContentRoute? {
-        didSet { updateTitleBarControlAvailability() }
+        didSet { refreshPresentation() }
     }
     private var activeBatchRenameSheet: BatchRenameSheetController?
     var batchActionDialogProviderForTesting: BatchActionDialogProvider?
@@ -509,8 +528,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                     self.lastViewRotationItemID = itemID
                     self.canvas.viewRotationQuarterTurns = 0
                 }
-                self.updateContinuousReadingPresentation()
-                self.updateFilmstripVisibility(hasLoadedImage: image != nil)
+                self.hasImage = image != nil
+                self.refreshPresentation()
                 let slide = self.pendingNavigationSlide
                 self.pendingNavigationSlide = nil
                 guard self.settings.animatesNavigationTransitions,
@@ -543,10 +562,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                     isLoading: isLoading,
                     loadErrorMessage: loadErrorMessage
                 ))
-                self.updateTitleBarControlAvailability(
-                    folderState: FolderRouteState(session: session, isLoading: isLoading)
-                )
-                self.updateWindowTitle(viewerTitle: self.viewModel.displayTitle)
+                self.folderRouteState = FolderRouteState(session: session, isLoading: isLoading)
+                self.refreshPresentation()
             }
             .store(in: &cancellables)
 
@@ -593,7 +610,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
 
         viewModel.$displayTitle
             .sink { [weak self] title in
-                self?.updateWindowTitle(viewerTitle: title)
+                guard let self else { return }
+                self.viewerTitle = title
+                self.refreshPresentation()
             }
             .store(in: &cancellables)
 
@@ -610,21 +629,14 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         )
             .sink { [weak self] image, loadPhase, errorMessage in
                 guard let self else { return }
-                self.updateEmptyStatePresentation(
-                    hasCurrentImage: image != nil,
-                    loadPhase: loadPhase,
-                    hasError: errorMessage != nil
-                )
+                // `@Published` 在 willSet 时发布，此刻 viewModel 上的属性还没写
+                // 回去，所以一律按发过来的这三个值更新快照，不要回头去读 viewModel。
+                self.hasImage = image != nil
+                self.imageLoadPhase = loadPhase
+                self.hasLoadError = errorMessage != nil
+                self.canEditImage = loadPhase == .full && image != nil
+                self.refreshPresentation()
                 self.announceLoadedImageIfNeeded(hasImage: image != nil, loadPhase: loadPhase)
-                // 能不能编辑取决于当前这张解到了哪一步。@Published 在 willSet 时
-                // 发布，此刻 viewModel 上的属性还没写回去，所以按发过来的这两个
-                // 值算，不要回头去读 viewModel。
-                self.updateTitleBarControlAvailability(
-                    canEditCurrentImage: loadPhase == .full && image != nil
-                )
-                // 信息栏让出的那一条随「有没有图」变化，胶卷条也跟着它挪。
-                self.updateInspectorPresentation(hasCurrentImage: image != nil)
-                self.updateFilmstripVisibility(hasLoadedImage: image != nil)
                 self.advanceFilmstripHighlightIfDisplayed(loadPhase: loadPhase)
             }
             .store(in: &cancellables)
@@ -663,19 +675,12 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                     previousEnabled: availability.previous,
                     nextEnabled: availability.next
                 )
-                if Self.shouldDisplayPageControls(
-                    itemCount: state?.items.count ?? 0,
-                    isCropping: self.cropOverlay.isCropping
-                ) {
-                    if didNavigate {
-                        self.revealPageControls()
-                    }
-                } else {
-                    self.hidePageControls(immediately: true)
-                }
+                self.navigationItemCount = state?.items.count ?? 0
                 self.updatePageStatus(navigationState: state)
-                self.updateTitleBarControlAvailability()
-                self.updateContinuousReadingPresentation()
+                self.refreshPresentation()
+                if didNavigate {
+                    self.revealPageControls()
+                }
             }
             .store(in: &cancellables)
 
@@ -983,7 +988,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     private func rotateViewOnly(by quarterTurns: Int) {
-        guard viewModel.currentImage != nil, !settings.usesContinuousReading else {
+        // 转的是「这一张怎么看」，只有单图查看有这回事。
+        guard presentation.mode == .single else {
             NSSound.beep()
             return
         }
@@ -992,10 +998,12 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     /// 进入编辑模式。裁切框和编辑控制条一起出现。
+    ///
+    /// 能不能进只问一句 `presentation.canEditImage`：它已经把「有图、解到位、
+    /// 正处在单图查看」这三件事算在一起了。守卫写在动作里，按钮状态过没过期
+    /// 都拦得住。
     @objc func startEditingImage(_ sender: Any?) {
-        guard !settings.usesContinuousReading,
-              viewModel.canEditCurrentImage,
-              !isEditingImage else {
+        guard presentation.canEditImage, !isEditingImage else {
             NSSound.beep()
             return
         }
@@ -1011,8 +1019,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         isEditingImage = true
         cropOverlay.aspectRatio = cropAspectRatio
         cropOverlay.beginCropping(in: imageDrawRect)
-        updateFilmstripVisibility()
-        updateEditControls()
+        refreshEditControlsContent()
+        refreshPresentation()
         window?.makeFirstResponder(cropOverlay)
     }
 
@@ -1036,11 +1044,14 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         isFolderBrowserMode: Bool,
         usesContinuousReading: Bool
     ) -> Bool {
-        canEditCurrentImage && !isFolderBrowserMode && !usesContinuousReading
+        WindowPresentation.imageEditingAllowed(
+            canEditCurrentImage: canEditCurrentImage,
+            mode: contentMode(isFolderBrowserMode: isFolderBrowserMode, usesContinuousReading: usesContinuousReading)
+        )
     }
 
     @objc func applyCrop(_ sender: Any?) {
-        guard viewModel.canEditCurrentImage, cropOverlay.isCropping else {
+        guard presentation.isEditing, viewModel.canEditCurrentImage else {
             NSSound.beep()
             return
         }
@@ -1069,16 +1080,18 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     private func exitEditMode() {
+        guard isEditingImage || cropOverlay.isCropping else { return }
         isEditingImage = false
         cropOverlay.endCropping()
-        updateEditControls()
+        refreshEditControlsContent()
+        refreshPresentation()
         window?.makeFirstResponder(canvas)
     }
 
     func changeCropAspectRatio(_ ratio: CropAspectRatio) {
         cropAspectRatio = ratio
         cropOverlay.aspectRatio = ratio
-        updateEditControls()
+        refreshEditControlsContent()
     }
 
     @objc func saveEdits(_ sender: Any?) {
@@ -1133,10 +1146,13 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     @objc func toggleFilmstrip(_ sender: Any?) {
+        guard presentation.canToggleFilmstrip else {
+            NSSound.beep()
+            return
+        }
         settings.showsFilmstrip.toggle()
         syncFilmstripContent(navigationState: viewModel.navigationState)
-        updateFilmstripVisibility()
-        updateTitleBarControlAvailability()
+        refreshPresentation()
     }
 
     @objc func toggleInspector(_ sender: Any?) {
@@ -1144,7 +1160,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     @objc func toggleContinuousReading(_ sender: Any?) {
-        guard !cropOverlay.isCropping else {
+        guard presentation.canToggleContinuousReading else {
             NSSound.beep()
             return
         }
@@ -1247,6 +1263,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     @objc func browseCurrentImageFolder(_ sender: Any?) {
+        guard presentation.canToggleGrid else {
+            NSSound.beep()
+            return
+        }
         if case .folder = currentRoute {
             guard let viewerRoute = associatedViewerRoute() else {
                 NSSound.beep()
@@ -1660,7 +1680,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         switch Self.keyAction(
             for: event.keyCode,
             shouldEndEditing: shouldEndEditing(for: event),
-            isCropping: cropOverlay.isCropping,
+            isCropping: presentation.isEditing,
             modifierFlags: event.modifierFlags,
             isFolderBrowserMode: isFolderBrowserMode
         ) {
@@ -1801,7 +1821,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             return .navigation
         case #selector(actualSize(_:)), #selector(zoomToFit(_:)), #selector(zoomToFitWidth(_:)):
             return .canvasSizing
-        case #selector(startCropping(_:)):
+        // 「编辑图片」在菜单里用的是 startEditingImage，startCropping 只是它的
+        // 旧名字。漏掉这一项，菜单校验就走到默认的「允许」上，网格里也能进编辑。
+        case #selector(startCropping(_:)), #selector(startEditingImage(_:)):
             return .startCropping
         case #selector(rotateClockwise(_:)):
             return .editOperation(.rotateClockwise)
@@ -1881,7 +1903,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         bottomZoomLabel.setAccessibilityValue(bottomZoomLabel.stringValue)
     }
 
-    private func updateEditControls() {
+    /// 编辑控制条的内容。比例菜单的勾选跟着当前比例走。
+    /// 它出不出现由 `presentation.isEditing` 决定，这里只管里面是什么。
+    private func refreshEditControlsContent() {
         cropControlsView.rootView = EditControlsView(
             aspectRatio: cropAspectRatio,
             onAspectRatioChange: { [weak self] in self?.changeCropAspectRatio($0) },
@@ -1892,25 +1916,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             onCancel: { [weak self] in self?.cancelCrop(nil) },
             onApply: { [weak self] in self?.applyCrop(nil) }
         )
-        // 遮罩淡进来，控制条从下面推上来，两件事同时发生，
-        // 「进入编辑」就是一个动作而不是两个控件各自出现。
-        Motion.setVisible(cropOverlay, cropOverlay.isCropping, duration: Motion.standard)
-        Motion.setVisible(
-            cropControlsView,
-            cropOverlay.isCropping,
-            slide: Motion.Slide(
-                cropControlsBottomConstraint,
-                visible: Self.cropControlsBottomSpacing,
-                hidden: Self.cropControlsHiddenBottomSpacing,
-                in: rootView
-            ),
-            duration: Motion.standard
-        )
-        if cropOverlay.isCropping {
-            hidePageControls()
-        }
-        // 标题栏那颗编辑按钮是开关，进出编辑都要跟着亮灭。
-        updateTitleBarControlAvailability()
     }
 
     /// 编辑应用完立刻问一次去向，不再拖到切换图片时才提示。
@@ -2042,20 +2047,16 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     private func applySettings() {
-        if cropOverlay.isCropping && settings.usesContinuousReading {
-            cancelCrop(nil)
+        // 连续浏览没有可裁的「当前这一张」，开关一打开就先退出编辑。
+        if isEditingImage, settings.usesContinuousReading {
+            exitEditMode()
         }
         canvas.backgroundColor = Self.canvasBackgroundColor()
         syncFilmstripContent(navigationState: viewModel.navigationState)
-        updateFilmstripVisibility()
-        updateInspectorPresentation(hasCurrentImage: viewModel.currentImage != nil)
-        bottomInfoButton.isOnState = settings.showsInspector
-        bottomInfoButton.setAccessibilityValue(settings.showsInspector)
         updateDimensionStatus(metadata: viewModel.currentMetadata)
         updatePageStatus(navigationState: viewModel.navigationState)
         updateZoomStatus()
-        updateContinuousReadingPresentation()
-        updateTitleBarControlAvailability()
+        refreshPresentation()
     }
 
     /// 胶卷条高亮的是画布上正显示的那张，不是导航状态里选中的那张。
@@ -2087,21 +2088,95 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         updateFilmstripSliderAvailability()
     }
 
-    private func updateContinuousReadingPresentation() {
-        let shouldShow = settings.usesContinuousReading
-            && viewModel.currentImage != nil
-            && !isFolderBrowserMode
-        // 单图和连续浏览铺在同一块地方，两者交叉淡入淡出，
-        // 一层退一层进，中间不会出现一帧空白。
-        Motion.setVisible(continuousReadingView, shouldShow, duration: Motion.standard)
-        setCanvasVisible(!(shouldShow || isFolderBrowserMode))
-        if shouldShow {
+    // MARK: - 界面状态
+
+    /// 把当下所有输入攒成一份，算出这一刻界面该是什么样。
+    private func currentPresentationInput() -> WindowPresentation.Input {
+        let mode = ContentMode.resolve(ContentMode.Input(
+            isBrowsingFolder: isBrowsingFolder,
+            hasImage: hasImage,
+            loadPhase: imageLoadPhase,
+            hasError: hasLoadError,
+            usesContinuousReading: settings.usesContinuousReading
+        ))
+        return WindowPresentation.Input(
+            mode: mode,
+            isEditing: isEditingImage,
+            chromeVisible: isChromeVisible,
+            inspectorEnabled: settings.showsInspector,
+            inspectorDocked: isInspectorDocked,
+            filmstripEnabled: settings.showsFilmstrip,
+            canEditCurrentImage: canEditImage,
+            canToggleGrid: canToggleTitleBarGrid(folderState: folderRouteState),
+            itemCount: navigationItemCount,
+            viewerTitle: viewerTitle,
+            folderURL: browsingFolderURL
+        )
+    }
+
+    /// 重算一次界面状态并贴上去。
+    ///
+    /// 所有改变状态的地方都以调用它收尾。谁先谁后不再影响结果：输入一致，
+    /// 算出来的就是同一份界面。
+    private func refreshPresentation(animated: Bool = true) {
+        let previous = presentation
+        let next = WindowPresentation.resolve(currentPresentationInput())
+        presentation = next
+        apply(next, previous: previous, animated: animated)
+    }
+
+    /// 把状态贴到视图上。
+    ///
+    /// 显隐一律走 Motion，它对「已经是这个状态」的调用直接返回，所以这里
+    /// 不必自己比对每一项。只有会牵动整套布局的那几件事才看差异。
+    private func apply(_ next: WindowPresentation, previous: WindowPresentation, animated: Bool) {
+        // 内容层。三块铺在同一个位置，交叉淡入淡出，中间不出现空白。
+        Motion.setVisible(canvas, next.showsCanvas, duration: Motion.standard, animated: animated)
+        Motion.setVisible(continuousReadingView, next.showsContinuousReading, duration: Motion.standard, animated: animated)
+        Motion.setVisible(folderBrowserView, next.showsFolderBrowser, duration: Motion.expressive, animated: animated)
+        Motion.setVisible(emptyStateView, next.showsEmptyState, duration: Motion.standard, animated: animated)
+        Motion.setVisible(errorStateView, next.showsErrorState, duration: Motion.standard, animated: animated)
+
+        // 浮层
+        setFilmstripOverlayVisible(next.showsFilmstrip, animated: animated)
+        setInspectorVisible(next.showsInspector, animated: animated)
+        setEditChromeVisible(next.isEditing, animated: animated)
+        setChromeBarsVisible(next.showsChrome, animated: animated)
+        if !next.allowsPageControls {
+            hidePageControls(immediately: !animated)
+        }
+
+        // 底栏里那几个只有看图时才有意义的状态
+        for view in [bottomDimensionLabel, bottomPageLabel, bottomInfoButton] {
+            view.isHidden = !next.showsImageStatus
+        }
+        bottomZoomLabel.isHidden = !next.showsZoomStatus
+
+        // 标题栏
+        applyTitleBarControls(next)
+        applyWindowTitle(next)
+
+        // 让出来的那一条变了，或者内容层换了，才走一次整窗布局。
+        if next.reservesInspectorColumn != previous.reservesInspectorColumn
+            || next.showsChrome != previous.showsChrome
+            || next.mode != previous.mode {
+            applyReservedLayout(animated: animated)
+        }
+
+        // 连续浏览的解码窗口跟着模式开关
+        if next.showsContinuousReading {
             refreshContinuousReadingWindow()
-        } else {
+        } else if previous.showsContinuousReading {
             continuousReadingTask?.cancel()
             continuousReadingTask = nil
         }
-        bottomZoomLabel.isHidden = shouldShow || isFolderBrowserMode || viewModel.currentImage == nil
+
+        // 首次使用提示只在单图看着一张完整的图时出现
+        if next.mode == .single, imageLoadPhase == .full {
+            showUsageHintIfNeeded()
+        } else if !next.mode.showsImage || next.mode == .grid {
+            hideUsageHint()
+        }
     }
 
     private func refreshContinuousReadingWindow() {
@@ -2118,11 +2193,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         }
     }
 
-    /// 画布的进出。连续浏览和文件夹网格都会把它换下去。
-    private func setCanvasVisible(_ visible: Bool) {
-        Motion.setVisible(canvas, visible, duration: Motion.standard)
-    }
-
     private func updateInspector(metadata: ImageMetadata?) {
         inspectorView.rootView = InspectorView(
             metadata: metadata,
@@ -2136,32 +2206,22 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         isInspectorDocked.toggle()
         updateInspector(metadata: viewModel.currentMetadata)
         // 停靠改变的是图片的可用区域，画面要跟着一起让，不能只有面板在动。
-        updateInspectorLayout(animated: true)
+        refreshPresentation()
+        applyReservedLayout(animated: true)
     }
 
     /// 停靠的信息栏要占掉的横向空间：面板宽度加上它两侧的间距。
     private var reservedInspectorWidth: CGFloat {
-        let shouldReserveColumn = isInspectorDocked
-            && settings.showsInspector
-            && viewModel.currentImage != nil
-            && !isFolderBrowserMode
-        guard shouldReserveColumn else { return 0 }
-        return GlassMetrics.inspectorWidth + GlassMetrics.floatingInset * 2
-    }
-
-    /// 信息栏在不在、占不占地方，都取决于开关和当前有没有图。
-    private func updateInspectorPresentation(hasCurrentImage: Bool) {
-        setInspectorVisible(Self.shouldDisplayInspector(
-            isEnabled: settings.showsInspector,
-            hasCurrentImage: hasCurrentImage
-        ) && !isFolderBrowserMode)
+        presentation.reservesInspectorColumn
+            ? GlassMetrics.inspectorWidth + GlassMetrics.floatingInset * 2
+            : 0
     }
 
     /// 信息栏朝窗口右沿滑进滑出。
     ///
-    /// 它占的那一条同时决定图片和几块浮层的位置，所以进出要和布局一起动，
+    /// 它占的那一条同时决定图片和几块浮层的位置，所以进出和布局一起动，
     /// 面板滑到一半图片就跳完位置的话，两件事看着不像同一个动作。
-    private func setInspectorVisible(_ visible: Bool) {
+    private func setInspectorVisible(_ visible: Bool, animated: Bool) {
         Motion.setVisible(
             inspectorView,
             visible,
@@ -2172,12 +2232,13 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                 in: rootView
             ),
             // 和它带动的那套布局同一档时长，面板和画面才像在做同一件事。
-            duration: Motion.expressive
+            duration: Motion.expressive,
+            animated: animated
         )
-        updateInspectorLayout(animated: true)
     }
 
-    private func updateInspectorLayout(animated: Bool = false) {
+    /// 信息栏让出的那一条落到图片和几块浮层上。
+    private func applyReservedLayout(animated: Bool) {
         // 信息栏永远是一块浮起的圆角玻璃，四周留同样的间距。停靠只表示它常驻，
         // 并且图片往左让出它占的这一条，不再贴到窗口边上。
         inspectorTopConstraint?.constant = GlassMetrics.floatingInset
@@ -2200,33 +2261,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         }
     }
 
-    /// 胶卷条的显示只由「开关有没有打开」决定。
-    ///
-    /// 原来它跟着指针走：鼠标不动一会儿就自己收起来，缩放超过一档也收。
-    /// 用户把它打开就是想一直看着它，这些自作主张的隐藏只会让人找不到它。
-    /// 现在开着就一直在，关掉才收。
-    /// `@Published` 在 willSet 时发布，订阅里读 viewModel 拿到的是旧值。
-    /// 有图没图由调用方按发过来的值传进来，读属性只是没有订阅上下文时的兜底。
-    private func updateFilmstripVisibility(hasLoadedImage: Bool? = nil, animated: Bool = true) {
-        let shouldShow = Self.shouldDisplayFilmstripOverlay(
-            isEnabled: settings.showsFilmstrip,
-            hasLoadedImage: hasLoadedImage ?? (viewModel.currentImage != nil),
-            isCropping: cropOverlay.isCropping,
-            isFolderBrowserMode: isFolderBrowserMode,
-            usesContinuousReading: settings.usesContinuousReading
-        )
-        guard shouldShow else {
-            hideFilmstripOverlay(immediately: !animated)
-            return
-        }
-        setFilmstripOverlayVisible(true, animated: animated)
-    }
-
-    private func hideFilmstripOverlay(immediately: Bool = false) {
-        setFilmstripOverlayVisible(false, animated: !immediately)
-    }
-
     /// 胶卷条从下边栏那一侧升起来，收起时按原路退回去。
+    ///
+    /// 显示与否只看开关和当前模式。原来它还跟着指针和缩放自己收起来，
+    /// 用户把它打开就是想一直看着它，那些自作主张的隐藏只会让人找不到它。
     private func setFilmstripOverlayVisible(_ visible: Bool, animated: Bool) {
         Motion.setVisible(
             filmstripOverlayView,
@@ -2238,6 +2276,53 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                 in: rootView
             ),
             duration: Self.overlayRevealDuration,
+            animated: animated
+        )
+    }
+
+    /// 编辑模式的遮罩和控制条。遮罩淡进来的同时控制条从下面推上来。
+    private func setEditChromeVisible(_ visible: Bool, animated: Bool) {
+        Motion.setVisible(cropOverlay, visible, duration: Motion.standard, animated: animated)
+        Motion.setVisible(
+            cropControlsView,
+            visible,
+            slide: Motion.Slide(
+                cropControlsBottomConstraint,
+                visible: Self.cropControlsBottomSpacing,
+                hidden: Self.cropControlsHiddenBottomSpacing,
+                in: rootView
+            ),
+            duration: Motion.standard,
+            animated: animated
+        )
+    }
+
+    /// 上下两条玻璃边栏。全屏里跟着指针收放，一边收高度一边淡出。
+    private func setChromeBarsVisible(_ visible: Bool, animated: Bool) {
+        Motion.setVisible(
+            titleBarView,
+            visible,
+            slide: Motion.Slide(
+                titleBarHeightConstraint,
+                visible: Self.titleBarHeight,
+                hidden: 0,
+                in: rootView,
+                restoresWhenHidden: false
+            ),
+            duration: Motion.expressive,
+            animated: animated
+        )
+        Motion.setVisible(
+            bottomBarView,
+            visible,
+            slide: Motion.Slide(
+                bottomBarHeightConstraint,
+                visible: Self.bottomBarHeight,
+                hidden: 0,
+                in: rootView,
+                restoresWhenHidden: false
+            ),
+            duration: Motion.expressive,
             animated: animated
         )
     }
@@ -2296,10 +2381,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     static let navigationTransitionDuration: CFTimeInterval = 0.24
 
     private func revealPageControls() {
-        guard Self.shouldDisplayPageControls(
-            itemCount: viewModel.navigationState?.items.count ?? 0,
-            isCropping: cropOverlay.isCropping
-        ) else {
+        guard presentation.allowsPageControls else {
             hidePageControls(immediately: true)
             return
         }
@@ -2408,7 +2490,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         )
         titleBarControlsStack.addArrangedSubview(titleBarMoreButton)
         titleBarView.contentView.addSubview(titleBarControlsStack)
-        updateTitleBarControlAvailability()
+        applyTitleBarControls(presentation)
         titleBarDoubleClickRecognizer.numberOfClicksRequired = 2
         titleBarDoubleClickRecognizer.delegate = self
         titleBarView.addGestureRecognizer(titleBarDoubleClickRecognizer)
@@ -2457,54 +2539,39 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         button.action = action
     }
 
-    private func updateTitleBarControlAvailability(
-        folderState: FolderRouteState? = nil,
-        canEditCurrentImage: Bool? = nil
-    ) {
-        let canEdit = canEditCurrentImage ?? viewModel.canEditCurrentImage
-        titleBarGridButton.isEnabled = canToggleTitleBarGrid(folderState: folderState)
-        let gridText: String
-        if case .folder = currentRoute {
-            gridText = AppStrings.text("titleBar.showImage")
-        } else {
-            gridText = AppStrings.text("titleBar.showFolder")
-        }
+    /// 标题栏那一排按钮的可用与点亮，全部从这一份状态取值。
+    private func applyTitleBarControls(_ presentation: WindowPresentation) {
+        titleBarGridButton.isEnabled = presentation.canToggleGrid
+        let gridText = presentation.mode == .grid
+            ? AppStrings.text("titleBar.showImage")
+            : AppStrings.text("titleBar.showFolder")
         titleBarGridButton.toolTip = gridText
         titleBarGridButton.setAccessibilityLabel(gridText)
         titleBarGridButton.image?.accessibilityDescription = gridText
         // 胶卷开关跟着设置走，打开时按钮着强调色，和右键菜单的勾选一致。
-        titleBarFilmstripButton.isEnabled = !isFolderBrowserMode
+        titleBarFilmstripButton.isEnabled = presentation.canToggleFilmstrip
         titleBarFilmstripButton.isOnState = settings.showsFilmstrip
         titleBarFilmstripButton.setAccessibilityValue(settings.showsFilmstrip)
         // 编辑按钮同样是开关：进了编辑模式就亮着，再按一下退出。
-        titleBarEditButton.isEnabled = Self.canEditFromTitleBar(
-            canEditCurrentImage: canEdit,
-            isFolderBrowserMode: isFolderBrowserMode,
-            usesContinuousReading: settings.usesContinuousReading
-        ) || isEditingImage
-        titleBarEditButton.isOnState = isEditingImage
-        titleBarEditButton.setAccessibilityValue(isEditingImage)
+        titleBarEditButton.isEnabled = presentation.canEditImage || presentation.isEditing
+        titleBarEditButton.isOnState = presentation.isEditing
+        titleBarEditButton.setAccessibilityValue(presentation.isEditing)
         // 连续浏览也是开关，条件和胶卷一样：网格模式里没有序列可滚。
-        titleBarContinuousReadingButton.isEnabled = !isFolderBrowserMode && !isEditingImage
+        titleBarContinuousReadingButton.isEnabled = presentation.canToggleContinuousReading
         titleBarContinuousReadingButton.isOnState = settings.usesContinuousReading
         titleBarContinuousReadingButton.setAccessibilityValue(settings.usesContinuousReading)
+        // 底栏那颗信息按钮也是开关，和上面这几颗同一套反馈。
+        bottomInfoButton.isOnState = settings.showsInspector
+        bottomInfoButton.setAccessibilityValue(settings.showsInspector)
     }
 
-    private func updateWindowTitle(viewerTitle: String) {
-        let title: String
-        let toolTip: String?
-        if case .folder(let folderURL) = currentRoute {
-            title = folderURL.lastPathComponent
-            toolTip = folderURL.path
-        } else {
-            title = viewerTitle
-            toolTip = nil
-        }
-        window?.title = title
-        titleLabel.stringValue = title
-        titleLabel.toolTip = toolTip
-        titleLabel.setAccessibilityLabel(title)
-        titleLabel.setAccessibilityHelp(toolTip)
+    /// 窗口标题。网格模式给目录名，单图给文件名，来源只有这一处。
+    private func applyWindowTitle(_ presentation: WindowPresentation) {
+        window?.title = presentation.title
+        titleLabel.stringValue = presentation.title
+        titleLabel.toolTip = presentation.titleToolTip
+        titleLabel.setAccessibilityLabel(presentation.title)
+        titleLabel.setAccessibilityHelp(presentation.titleToolTip)
     }
 
     /// 三点菜单和右键菜单共用同一份定义，条目、顺序和图标始终一致。
@@ -2520,6 +2587,12 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             if let match = menuItem(in: item.submenu, matching: action) { return match }
         }
         return nil
+    }
+
+    /// 网格模式下标题该显示哪个目录。
+    private var browsingFolderURL: URL? {
+        if case let .folder(url) = currentRoute { return url }
+        return folderRouteState?.session?.folderURL ?? folderBrowserViewModel.session?.folderURL
     }
 
     private func canToggleTitleBarGrid(folderState: FolderRouteState?) -> Bool {
@@ -2590,44 +2663,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         .windowBackgroundColor
     }
 
-    private func updateEmptyStatePresentation() {
-        updateEmptyStatePresentation(
-            hasCurrentImage: viewModel.currentImage != nil,
-            loadPhase: viewModel.loadPhase,
-            hasError: viewModel.errorMessage != nil
-        )
-    }
-
-    private func updateEmptyStatePresentation(
-        hasCurrentImage: Bool,
-        loadPhase: ImageLoadPhase,
-        hasError: Bool
-    ) {
-        // 空状态和错误状态互相接力，硬切会闪一下，让它们淡入淡出。
-        Motion.setVisible(emptyStateView, !isFolderBrowserMode && Self.shouldDisplayEmptyState(
-            hasCurrentImage: hasCurrentImage,
-            loadPhase: loadPhase,
-            hasError: hasError
-        ), duration: Motion.standard)
-        Motion.setVisible(errorStateView, !isFolderBrowserMode && Self.shouldDisplayErrorState(
-            hasCurrentImage: hasCurrentImage,
-            hasError: hasError
-        ), duration: Motion.standard)
-
-        let shouldHideStatusContent = isFolderBrowserMode || Self.shouldHideImageStatusContent(
-            hasCurrentImage: hasCurrentImage
-        )
-        for view in [bottomDimensionLabel, bottomPageLabel, bottomZoomLabel, bottomInfoButton] {
-            view.isHidden = shouldHideStatusContent
-        }
-        updateInspectorPresentation(hasCurrentImage: hasCurrentImage)
-        if hasCurrentImage && loadPhase == .full && !isFolderBrowserMode {
-            showUsageHintIfNeeded()
-        } else if !hasCurrentImage || isFolderBrowserMode {
-            hideUsageHint()
-        }
-    }
-
     private func showUsageHintIfNeeded() {
         guard !settings.hasShownUsageHint, usageHintView.isHidden else { return }
         settings.hasShownUsageHint = true
@@ -2677,32 +2712,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     /// 两条栏一边把高度收到零一边淡出，图片同时补上让出来的空间。
     /// 只改 `isHidden` 的话，画面会在指针停下的一瞬间整个跳一下。
     private func setFullScreenChromeVisible(_ visible: Bool) {
+        guard isChromeVisible != visible else { return }
         isChromeVisible = visible
-        Motion.setVisible(
-            titleBarView,
-            visible,
-            slide: Motion.Slide(
-                titleBarHeightConstraint,
-                visible: Self.titleBarHeight,
-                hidden: 0,
-                in: rootView,
-                restoresWhenHidden: false
-            ),
-            duration: Motion.expressive
-        )
-        Motion.setVisible(
-            bottomBarView,
-            visible,
-            slide: Motion.Slide(
-                bottomBarHeightConstraint,
-                visible: Self.bottomBarHeight,
-                hidden: 0,
-                in: rootView,
-                restoresWhenHidden: false
-            ),
-            duration: Motion.expressive
-        )
-        updateCanvasContentInsets(chromeVisible: visible, animated: true)
+        refreshPresentation()
         rootView.needsLayout = true
     }
 
@@ -2743,42 +2755,31 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         )
     }
 
+    /// 进网格。编辑先退干净，剩下的十来处显隐由状态一次算出来。
     private func enterFolderBrowserMode() {
-        if cropOverlay.isCropping {
-            cropOverlay.endCropping()
-            updateEditControls()
-        }
-        isFolderBrowserMode = true
-        // 网格铺上来，单图和连续浏览同时退下去，两边的透明度对着走。
-        Motion.setVisible(folderBrowserView, true, duration: Motion.expressive)
-        setCanvasVisible(false)
-        Motion.setVisible(continuousReadingView, false, duration: Motion.standard)
-        continuousReadingTask?.cancel()
-        Motion.setVisible(emptyStateView, false, duration: Motion.quick)
-        Motion.setVisible(errorStateView, false, duration: Motion.quick)
-        hideFilmstripOverlay()
-        hidePageControls()
-        Motion.setVisible(cropOverlay, false, duration: Motion.quick)
-        Motion.setVisible(cropControlsView, false, duration: Motion.quick)
-        updateEmptyStatePresentation()
-        updateInspectorLayout()
+        exitEditMode()
+        isBrowsingFolder = true
+        refreshPresentation()
     }
 
     private func exitFolderBrowserMode() {
-        guard isFolderBrowserMode || !folderBrowserView.isHidden || canvas.isHidden else { return }
-        isFolderBrowserMode = false
-        Motion.setVisible(folderBrowserView, false, duration: Motion.expressive)
-        updateContinuousReadingPresentation()
-        updateEmptyStatePresentation()
-        updateInspectorLayout()
+        isBrowsingFolder = false
+        refreshPresentation()
     }
+
+    // 下面这几条规则的实现都在 WindowPresentation，这里只是对外的名字。
+    // 界面按 presentation 走，测试和菜单校验按这些入口走，两边同一份规则。
 
     static func shouldDisplayEmptyState(
         hasCurrentImage: Bool,
         loadPhase: ImageLoadPhase,
         hasError: Bool
     ) -> Bool {
-        !hasCurrentImage && loadPhase == .empty && !hasError
+        WindowPresentation.emptyStateVisible(
+            hasImage: hasCurrentImage,
+            loadPhase: loadPhase,
+            hasError: hasError
+        )
     }
 
     static func shouldHideImageStatusContent(hasCurrentImage: Bool) -> Bool {
@@ -2786,11 +2787,11 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     static func shouldDisplayErrorState(hasCurrentImage: Bool, hasError: Bool) -> Bool {
-        !hasCurrentImage && hasError
+        WindowPresentation.errorStateVisible(hasImage: hasCurrentImage, hasError: hasError)
     }
 
     static func shouldDisplayInspector(isEnabled: Bool, hasCurrentImage: Bool) -> Bool {
-        isEnabled && hasCurrentImage
+        WindowPresentation.inspectorVisible(isEnabled: isEnabled, hasImage: hasCurrentImage)
     }
 
     var isEmptyStateVisibleForTesting: Bool { !emptyStateView.isHidden }
@@ -2999,7 +3000,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         guard viewModel.currentImage == nil, viewModel.errorMessage != nil else { return }
         viewModel.resetToEmptyState()
         hasAssignedOpenRequest = false
-        updateEmptyStatePresentation()
+        refreshPresentation()
     }
 
     func updateRecentItems(_ urls: [URL]) {
@@ -3017,11 +3018,22 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         isFolderBrowserMode: Bool = false,
         usesContinuousReading: Bool = false
     ) -> Bool {
-        isEnabled && hasLoadedImage && !isCropping && !isFolderBrowserMode && !usesContinuousReading
+        WindowPresentation.filmstripVisible(
+            isEnabled: isEnabled,
+            hasImage: hasLoadedImage,
+            isEditing: isCropping,
+            mode: contentMode(isFolderBrowserMode: isFolderBrowserMode, usesContinuousReading: usesContinuousReading)
+        )
     }
 
     static func shouldDisplayPageControls(itemCount: Int, isCropping: Bool) -> Bool {
-        itemCount > 1 && !isCropping
+        WindowPresentation.pageControlsAllowed(mode: .single, itemCount: itemCount, isEditing: isCropping)
+    }
+
+    /// 只有布尔开关可用时把它们折成模式。给上面那几个老入口用。
+    private static func contentMode(isFolderBrowserMode: Bool, usesContinuousReading: Bool) -> ContentMode {
+        if isFolderBrowserMode { return .grid }
+        return usesContinuousReading ? .continuous : .single
     }
 
     static func pageControlAvailability(
@@ -3078,6 +3090,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     private func navigateToNextImage() {
+        guard presentation.allowsImageCommands else { return }
         pendingNavigationSlide = .fromRight
         cancelCrop(nil)
         confirmUnsavedEditsIfNeeded(for: .navigating) { [weak self] in
@@ -3091,6 +3104,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     private func navigateToPreviousImage() {
+        guard presentation.allowsImageCommands else { return }
         pendingNavigationSlide = .fromLeft
         cancelCrop(nil)
         confirmUnsavedEditsIfNeeded(for: .navigating) { [weak self] in
@@ -3165,37 +3179,33 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
 
 extension MainWindowController: NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        // 和界面共用同一份状态：菜单里能不能点，跟按钮亮不亮是同一条规则。
         if menuItem.action == #selector(undoEdit(_:)) {
             menuItem.title = viewModel.undoMenuTitle
-            return !isFolderBrowserMode && viewModel.canUndo
+            return presentation.allowsImageCommands && viewModel.canUndo
         }
         if menuItem.action == #selector(redoEdit(_:)) {
             menuItem.title = viewModel.redoMenuTitle
-            return !isFolderBrowserMode && viewModel.canRedo
+            return presentation.allowsImageCommands && viewModel.canRedo
         }
         if menuItem.action == #selector(toggleFilmstrip(_:)) {
-            guard !isFolderBrowserMode else { return false }
+            guard presentation.canToggleFilmstrip else { return false }
             menuItem.state = settings.showsFilmstrip ? .on : .off
             return true
         }
         if menuItem.action == #selector(toggleInspector(_:)) {
-            guard !isFolderBrowserMode else { return false }
+            guard presentation.allowsImageCommands else { return false }
             menuItem.state = settings.showsInspector ? .on : .off
             return true
         }
         if menuItem.action == #selector(toggleContinuousReading(_:)) {
-            guard !isFolderBrowserMode,
-                  !cropOverlay.isCropping,
-                  viewModel.currentImage != nil else { return false }
+            guard presentation.canToggleContinuousReading, hasImage else { return false }
             menuItem.state = settings.usesContinuousReading ? .on : .off
             return true
         }
-        if menuItem.action == #selector(startCropping(_:)), settings.usesContinuousReading {
-            return false
-        }
         if menuItem.action == #selector(showPreviousImage(_:))
             || menuItem.action == #selector(showNextImage(_:)) {
-            guard !isFolderBrowserMode else { return false }
+            guard presentation.allowsImageCommands else { return false }
             let availability = Self.pageControlAvailability(
                 navigationState: viewModel.navigationState,
                 readingDirection: settings.readingDirection
@@ -3209,6 +3219,9 @@ extension MainWindowController: NSMenuItemValidation {
             return true
         }
 
+        if command == .startCropping {
+            return presentation.canEditImage
+        }
         return Self.isMenuCommandEnabled(
             command,
             hasCurrentItem: viewModel.navigationState?.currentItem != nil,

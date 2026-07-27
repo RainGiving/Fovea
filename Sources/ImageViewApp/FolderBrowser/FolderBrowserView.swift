@@ -39,6 +39,10 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
     private let operationProgressLabel = NSTextField(labelWithString: "")
     private let cancelOperationButton = NSButton()
     private let operationProgressStack = NSStackView()
+    /// 计数、操作状态、进度三行摞在一起。用 stack 是因为它会把隐藏的行折掉，
+    /// 空闲时网格紧跟在计数下面，不再给两行看不见的状态白留一截。
+    private let headerStack = NSStackView()
+    private let operationStatusRow = NSStackView()
     private let collectionView = ReturnOpeningCollectionView()
     private let collectionScrollView = NSScrollView()
     private let stateProgressIndicator = NSProgressIndicator()
@@ -97,6 +101,11 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
             .map(\.title)
     }
     var testingIsCollectionVisible: Bool { !collectionScrollView.isHidden }
+    /// 计数那一行的下沿到网格上沿的距离。批量操作的状态行藏着时不该在这儿留白。
+    var testingCountToGridSpacing: CGFloat {
+        layoutSubtreeIfNeeded()
+        return countLabel.frame.minY - collectionScrollView.frame.maxY
+    }
     var testingScrollOrigin: NSPoint { collectionScrollView.contentView.bounds.origin }
     var testingDoubleClickRecognizerCount: Int {
         collectionView.gestureRecognizers.count {
@@ -304,6 +313,7 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
 
         operationStatusLabel.stringValue = completeStatusText
         operationStatusLabel.isHidden = completeStatusText.isEmpty
+        updateOperationStatusRowVisibility()
         if wasOperating && !isOperating && !completeStatusText.isEmpty {
             announce(String(format: AppStrings.text("folderBrowser.announcement.completed"), completeStatusText))
         }
@@ -330,6 +340,14 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
     func applyUndoAvailability(_ isAvailable: Bool) {
         undoOperationButton.isHidden = !isAvailable
         undoOperationButton.isEnabled = isAvailable && !currentIsOperating
+        updateOperationStatusRowVisibility()
+    }
+
+    /// 状态行里三样东西都没有时整行折掉，网格往上贴。
+    private func updateOperationStatusRowVisibility() {
+        operationStatusRow.isHidden = operationStatusLabel.isHidden
+            && undoOperationButton.isHidden
+            && operationDetailsButton.isHidden
     }
 
     func testingSelectItems(with ids: Set<ImageItem.ID>) {
@@ -545,6 +563,9 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
         operationProgressStack.spacing = 8
         operationProgressStack.translatesAutoresizingMaskIntoConstraints = false
         operationProgressStack.isHidden = true
+        // 没有批量操作时这两行都不在，网格紧跟在计数下面。
+        operationStatusLabel.isHidden = true
+        operationStatusRow.isHidden = true
         operationProgressIndicator.widthAnchor.constraint(equalToConstant: 140).isActive = true
 
         toolbar.setViews([
@@ -567,7 +588,7 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
         countLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let layout = NSCollectionViewFlowLayout()
-        layout.itemSize = NSSize(width: 148, height: 168)
+        layout.itemSize = NSSize(width: 148, height: 182)
         layout.minimumInteritemSpacing = 12
         layout.minimumLineSpacing = 14
         layout.sectionInset = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
@@ -634,11 +655,23 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
         primaryRecoveryButton.isHidden = true
         secondaryRecoveryButton.isHidden = true
 
+        operationStatusRow.setViews([operationStatusLabel, operationActionsStack], in: .leading)
+        operationStatusRow.translatesAutoresizingMaskIntoConstraints = false
+        operationStatusRow.orientation = .horizontal
+        operationStatusRow.alignment = .centerY
+        operationStatusRow.spacing = 8
+        operationStatusRow.distribution = .fill
+        operationStatusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        operationStatusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        headerStack.setViews([countLabel, operationStatusRow, operationProgressStack], in: .leading)
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+        headerStack.orientation = .vertical
+        headerStack.alignment = .leading
+        headerStack.spacing = 4
+
         addSubview(toolbar)
-        addSubview(countLabel)
-        addSubview(operationStatusLabel)
-        addSubview(operationActionsStack)
-        addSubview(operationProgressStack)
+        addSubview(headerStack)
         addSubview(collectionScrollView)
         addSubview(stateStack)
 
@@ -647,21 +680,13 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
             toolbar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             toolbar.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
 
-            countLabel.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 6),
-            countLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            countLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            headerStack.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 6),
+            headerStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            headerStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            operationStatusRow.widthAnchor.constraint(equalTo: headerStack.widthAnchor),
+            operationProgressStack.widthAnchor.constraint(equalTo: headerStack.widthAnchor),
 
-            operationStatusLabel.topAnchor.constraint(equalTo: countLabel.bottomAnchor, constant: 4),
-            operationStatusLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            operationStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: operationActionsStack.leadingAnchor, constant: -8),
-            operationActionsStack.centerYAnchor.constraint(equalTo: operationStatusLabel.centerYAnchor),
-            operationActionsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-
-            operationProgressStack.topAnchor.constraint(equalTo: operationStatusLabel.bottomAnchor, constant: 4),
-            operationProgressStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            operationProgressStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
-
-            collectionScrollView.topAnchor.constraint(equalTo: operationProgressStack.bottomAnchor, constant: 8),
+            collectionScrollView.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 8),
             collectionScrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             collectionScrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
             collectionScrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
