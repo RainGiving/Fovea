@@ -204,6 +204,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private var inspectorTopConstraint: NSLayoutConstraint!
     private var inspectorBottomConstraint: NSLayoutConstraint!
     /// 信息面板的固定宽度，停靠时画布让出的正是这个宽度。
+    private var pageNavigationTrailingConstraint: NSLayoutConstraint!
     private var filmstripCenterXConstraint: NSLayoutConstraint!
     private var filmstripTrailingConstraint: NSLayoutConstraint!
     private var filmstripWidthConstraint: NSLayoutConstraint!
@@ -221,6 +222,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private var isFolderBrowserMode = false
     /// 全屏里 chrome 会自动收起，重算图片内边距时要知道当下是收着还是展开。
     private var isChromeVisible = true
+    /// 胶卷条当前高亮的条目，跟着画布上显示的那张走。
+    private var filmstripHighlightID: ImageItem.ID?
     private var currentFolderBrowserItems: [ImageItem] = []
     private var currentRoute: ContentRoute? {
         didSet { updateTitleBarControlAvailability() }
@@ -605,6 +608,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                 // 信息栏让出的那一条随「有没有图」变化，胶卷条也跟着它挪。
                 self.updateInspectorPresentation(hasCurrentImage: image != nil)
                 self.updateFilmstripVisibility(hasLoadedImage: image != nil)
+                self.advanceFilmstripHighlightIfDisplayed(loadPhase: loadPhase)
             }
             .store(in: &cancellables)
 
@@ -717,6 +721,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             lessThanOrEqualTo: bottomBarView.topAnchor,
             constant: -GlassMetrics.floatingInset
         )
+        // 翻页按钮浮在画布右沿，信息栏停靠时要跟着往左让，否则右边那颗被压在面板底下。
+        pageNavigationTrailingConstraint = pageNavigationOverlayView.trailingAnchor.constraint(
+            equalTo: canvas.trailingAnchor
+        )
         // 胶卷条跟着图片可用的那块区域走。信息栏停靠时右边让出一条，
         // 胶卷条要往左收，否则会被压在面板底下。
         filmstripCenterXConstraint = filmstripOverlayView.centerXAnchor.constraint(equalTo: canvas.centerXAnchor)
@@ -805,7 +813,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             filmstripSlider.trailingAnchor.constraint(equalTo: filmstripOverlayView.contentView.trailingAnchor, constant: -14),
             filmstripSlider.bottomAnchor.constraint(equalTo: filmstripOverlayView.contentView.bottomAnchor, constant: -8),
             pageNavigationOverlayView.leadingAnchor.constraint(equalTo: canvas.leadingAnchor),
-            pageNavigationOverlayView.trailingAnchor.constraint(equalTo: canvas.trailingAnchor),
+            pageNavigationTrailingConstraint,
             pageNavigationOverlayView.topAnchor.constraint(equalTo: titleBarView.bottomAnchor),
             pageNavigationOverlayView.bottomAnchor.constraint(equalTo: bottomBarView.topAnchor),
             cropOverlay.leadingAnchor.constraint(equalTo: canvas.leadingAnchor),
@@ -2007,17 +2015,31 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         updateTitleBarControlAvailability()
     }
 
-    private func syncFilmstripContent(navigationState: NavigationState?) {
+    /// 胶卷条高亮的是画布上正显示的那张，不是导航状态里选中的那张。
+    ///
+    /// 按下翻页时导航状态立刻就变，图片要等解码回来才换。两边各自跟各自的时机
+    /// 走，胶卷条先滑、画面后换，看着就是没对上。高亮统一等到图片落到画布那一刻
+    /// 再挪，两个动画在同一个 runloop 回合里开始，节奏才一致。
+    private func advanceFilmstripHighlightIfDisplayed(loadPhase: ImageLoadPhase) {
+        guard loadPhase != .loading else { return }
+        guard let currentID = viewModel.navigationState?.currentItem?.id,
+              currentID != filmstripHighlightID else { return }
+        filmstripHighlightID = currentID
+        syncFilmstripContent(navigationState: viewModel.navigationState, animated: true)
+    }
+
+    private func syncFilmstripContent(navigationState: NavigationState?, animated: Bool = false) {
         guard settings.showsFilmstrip else {
             filmstripView.apply(items: [], current: nil)
             return
         }
-        filmstripView.apply(
-            items: navigationState?.items ?? [],
-            current: navigationState?.currentItem
-        )
+        let items = navigationState?.items ?? []
+        // 高亮的那张还在列表里就用它，否则退回导航状态的当前项。
+        // 首次打开、删除、外部改名都会走后面这条。
+        let highlighted = items.first { $0.id == filmstripHighlightID } ?? navigationState?.currentItem
+        filmstripHighlightID = highlighted?.id
+        filmstripView.apply(items: items, current: highlighted, animated: animated)
         // 条目数变了可滚动性也会变，重算一次滑杆是否可用。
-        filmstripView.layoutSubtreeIfNeeded()
         filmstripSlider.doubleValue = Double(filmstripView.scrollProgress)
         updateFilmstripSliderAvailability()
     }
@@ -2094,10 +2116,11 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         // 画布始终铺满整窗，模糊底才连成一片，玻璃底下也才有东西可以折射。
         // 图片靠 contentInsets 避开面板，和它避开上下边栏是同一套做法。
         updateCanvasContentInsets(chromeVisible: isChromeVisible)
-        // 胶卷条同样要避开那一条，它浮在画布上，不受 contentInsets 影响。
+        // 浮在画布上的那几层不受 contentInsets 影响，各自避开那一条。
         let reserved = reservedInspectorWidth
         filmstripCenterXConstraint?.constant = -reserved / 2
         filmstripTrailingConstraint?.constant = -(GlassMetrics.floatingInset + reserved)
+        pageNavigationTrailingConstraint?.constant = -reserved
         rootView.layoutSubtreeIfNeeded()
     }
 
@@ -2717,6 +2740,16 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var isFilmstripVisibleForTesting: Bool { !filmstripOverlayView.isHidden }
     var filmstripOverlayFrameForTesting: NSRect { filmstripOverlayView.frame }
     var inspectorFrameForTesting: NSRect { inspectorView.frame }
+    // 这两个要读浮层内部的调试出口，那些出口只在 DEBUG 下存在。
+    #if DEBUG
+    var nextPageButtonFrameForTesting: NSRect {
+        rootView.convert(
+            pageNavigationOverlayView.debugNextButton.bounds,
+            from: pageNavigationOverlayView.debugNextButton
+        )
+    }
+    var filmstripHighlightedTitleForTesting: String? { filmstripView.debugSelectedTitle() }
+    #endif
     var bottomBarFrameForTesting: NSRect { bottomBarView.frame }
     var titleBarFilmstripButtonForTesting: HoverToolbarButton { titleBarFilmstripButton }
     var titleBarEditButtonForTesting: HoverToolbarButton { titleBarEditButton }

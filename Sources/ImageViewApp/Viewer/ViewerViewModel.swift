@@ -52,6 +52,7 @@ final class ViewerViewModel: ObservableObject {
         navigationState?.currentItem?.url.lastPathComponent ?? "ImageView"
     }
 
+    private var lastNavigationDirection: NavigationDirection = .forward
     private let scanContainingDirectory: @Sendable (URL) async throws -> [ImageItem]
     private let decodeImageAtURL: @Sendable (URL, SupportedImageFormat) throws -> DecodedImage
     private let loadImageAtURL: @Sendable (URL, SupportedImageFormat) async throws -> VersionedLoadedImage
@@ -315,6 +316,7 @@ final class ViewerViewModel: ObservableObject {
     }
 
     func showNext() {
+        lastNavigationDirection = .forward
         let previousURL = navigationState?.currentItem?.url
         navigationState?.moveNext()
         if navigationState?.currentItem?.url != previousURL {
@@ -325,6 +327,7 @@ final class ViewerViewModel: ObservableObject {
     }
 
     func showPrevious() {
+        lastNavigationDirection = .backward
         let previousURL = navigationState?.currentItem?.url
         navigationState?.movePrevious()
         if navigationState?.currentItem?.url != previousURL {
@@ -341,6 +344,10 @@ final class ViewerViewModel: ObservableObject {
             return
         }
 
+        // 从胶卷条直接跳，方向按跳过去的那一侧算。
+        if let from = state.currentIndex, let to = state.items.firstIndex(of: item) {
+            lastNavigationDirection = to >= from ? .forward : .backward
+        }
         navigationState = NavigationState(items: state.items, currentURL: item.url)
         if state.currentItem?.url != navigationState?.currentItem?.url {
             loadPhase = .loading
@@ -854,13 +861,48 @@ final class ViewerViewModel: ObservableObject {
         return displayRequestGeneration
     }
 
+    /// 上下各预读几张。
+    static let preloadRadius = 2
+
+    /// 用户正在往哪个方向翻。预读顺序按它排。
+    enum NavigationDirection {
+        case forward
+        case backward
+    }
+
+    /// 预读顺序：先近后远，同样远时先解用户正在去的那一侧。
+    ///
+    /// 原来按下标从小到大排，往后翻时最该先解的下一张排在第三个。
+    /// 一张大图一两百毫秒，等排到它手感已经断了。
+    static func preloadOrder(
+        around currentIndex: Int,
+        in range: ClosedRange<Int>,
+        direction: NavigationDirection
+    ) -> [Int] {
+        range.filter { $0 != currentIndex }.sorted { lhs, rhs in
+            let lhsDistance = abs(lhs - currentIndex)
+            let rhsDistance = abs(rhs - currentIndex)
+            guard lhsDistance == rhsDistance else { return lhsDistance < rhsDistance }
+            let lhsIsAhead = direction == .forward ? lhs > currentIndex : lhs < currentIndex
+            let rhsIsAhead = direction == .forward ? rhs > currentIndex : rhs < currentIndex
+            guard lhsIsAhead == rhsIsAhead else { return lhsIsAhead }
+            return lhs < rhs
+        }
+    }
+
     private func preloadNeighbors() {
         guard let state = navigationState, let current = state.currentItem else { return }
         let currentIndex = state.currentIndex ?? 0
-        let lowerBound = max(0, currentIndex - 2)
-        let upperBound = min(state.items.count - 1, currentIndex + 2)
-        let neighbors = state.items[lowerBound...upperBound].filter {
-            $0.id != current.id && Self.canPreloadInBackground($0.format)
+        let lowerBound = max(0, currentIndex - Self.preloadRadius)
+        let upperBound = min(state.items.count - 1, currentIndex + Self.preloadRadius)
+        let neighbors = Self.preloadOrder(
+            around: currentIndex,
+            in: lowerBound...upperBound,
+            direction: lastNavigationDirection
+        ).compactMap { index -> ImageItem? in
+            let item = state.items[index]
+            guard item.id != current.id, Self.canPreloadInBackground(item.format) else { return nil }
+            return item
         }
 
         guard !neighbors.isEmpty else { return }

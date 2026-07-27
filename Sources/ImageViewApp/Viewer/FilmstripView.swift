@@ -52,17 +52,21 @@ final class FilmstripView: NSScrollView {
         }
 
         func configure(isSelected: Bool) {
-            isCurrent = isSelected
             let thumbnailSize = FilmstripView.thumbnailSize(isSelected: isSelected)
             if widthConstraint == nil {
                 widthConstraint = widthAnchor.constraint(equalToConstant: thumbnailSize.width)
                 heightConstraint = heightAnchor.constraint(equalToConstant: thumbnailSize.height)
                 widthConstraint.isActive = true
                 heightConstraint.isActive = true
+            } else if isCurrent == isSelected {
+                // 选中态没变就什么都不用做。翻一页只有两格真的换了状态，
+                // 其余四十来格白跑一趟裁切、NSImage 分配和图层改动。
+                return
             } else {
                 widthConstraint.constant = thumbnailSize.width
                 heightConstraint.constant = thumbnailSize.height
             }
+            isCurrent = isSelected
             applyThumbnail()
             refreshSelectionAppearance()
         }
@@ -266,7 +270,7 @@ final class FilmstripView: NSScrollView {
         nil
     }
 
-    func apply(items: [ImageItem], current: ImageItem?) {
+    func apply(items: [ImageItem], current: ImageItem?, animated: Bool = false) {
         let contentChanged = items != allItems
         allItems = items
         guard let current,
@@ -283,9 +287,8 @@ final class FilmstripView: NSScrollView {
         if contentChanged || !retainedItems.contains(where: { $0.id == current.id }) {
             rebuild(items: Self.retainedWindow(in: items, centeredAt: currentIndex), current: current)
         } else {
-            // 换的是同一批里的另一张，这一步用户看得见，让它滑过去。
             updateSelection(current: current)
-            updateCenteredLayout(force: true, animated: true)
+            updateCenteredLayout(force: true, animated: animated)
         }
     }
 
@@ -422,8 +425,8 @@ final class FilmstripView: NSScrollView {
     private func updateCenteredLayout(force: Bool = false, animated: Bool = false) {
         guard !isUpdatingCenteredLayout else { return }
         let viewportWidth = contentView.bounds.width
-        guard viewportWidth > 0,
-              force || abs(viewportWidth - lastViewportWidth) > 0.5 else { return }
+        let viewportChanged = abs(viewportWidth - lastViewportWidth) > 0.5
+        guard viewportWidth > 0, force || viewportChanged else { return }
 
         isUpdatingCenteredLayout = true
         defer { isUpdatingCenteredLayout = false }
@@ -438,18 +441,24 @@ final class FilmstripView: NSScrollView {
             return
         }
 
-        // 选中那格的宽度是定值，不必先把留白清零、量一遍再摆回去。
-        // 每次翻页都会走到这里，省掉的是一整趟布局。
-        let spacerWidth = max(0, (viewportWidth - Self.selectedThumbnailSize.width) / 2 - stack.spacing)
-        leadingSpacerWidthConstraint.constant = spacerWidth
-        trailingSpacerWidthConstraint.constant = spacerWidth
+        // 留白只跟视口宽度有关，翻页时它不变，不用每次重算。
+        // 选中那格的宽度是定值，也不必先清零量一遍再摆回去。
+        if viewportChanged {
+            let spacerWidth = max(0, (viewportWidth - Self.selectedThumbnailSize.width) / 2 - stack.spacing)
+            leadingSpacerWidthConstraint.constant = spacerWidth
+            trailingSpacerWidthConstraint.constant = spacerWidth
+        }
         resizeDocumentToFit()
         centerSelectedThumbnail(animated: animated)
     }
 
     private func resizeDocumentToFit() {
         stack.layoutSubtreeIfNeeded()
-        stack.frame.size = stack.fittingSize
+        let fittingSize = stack.fittingSize
+        // 翻页时一格放大、另一格缩小，总宽正好抵消。尺寸没变就别再走一趟布局。
+        guard abs(stack.frame.width - fittingSize.width) > 0.5
+            || abs(stack.frame.height - fittingSize.height) > 0.5 else { return }
+        stack.frame.size = fittingSize
         stack.needsLayout = true
         stack.layoutSubtreeIfNeeded()
     }

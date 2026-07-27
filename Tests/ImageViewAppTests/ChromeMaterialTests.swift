@@ -141,6 +141,72 @@ final class ChromeMaterialTests: XCTestCase {
         XCTAssertLessThan(dockedFrame.maxX, floatingFrame.maxX, "右沿要往左收")
     }
 
+    /// 右边那颗翻页按钮同样要让开停靠的信息栏。
+    func testNextPageButtonStepsAsideForTheDockedInspector() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeTestPNG(to: root.appendingPathComponent("a.png"))
+        try writeTestPNG(to: root.appendingPathComponent("b.png"))
+        let settings = AppSettings(defaults: makeIsolatedDefaults())
+        settings.showsInspector = true
+        let controller = MainWindowController(settings: settings)
+        let window = try XCTUnwrap(controller.window)
+
+        controller.open(url: root.appendingPathComponent("a.png"))
+        for _ in 0..<500 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        window.contentView?.layoutSubtreeIfNeeded()
+        let floatingFrame = controller.nextPageButtonFrameForTesting
+
+        controller.toggleInspectorDockForTesting()
+        window.contentView?.layoutSubtreeIfNeeded()
+        let dockedFrame = controller.nextPageButtonFrameForTesting
+
+        XCTAssertFalse(
+            dockedFrame.intersects(controller.inspectorFrameForTesting),
+            "翻页按钮 \\(dockedFrame) 不该压进信息栏 \\(controller.inspectorFrameForTesting)"
+        )
+        XCTAssertLessThan(dockedFrame.maxX, floatingFrame.maxX, "右沿要往左收")
+    }
+
+    /// 胶卷条的高亮跟着画布上显示的那张走，不跟着导航状态。
+    ///
+    /// 按下翻页时导航状态立刻就变，图片要等解码。高亮如果跟着导航状态，
+    /// 就会先于画面挪过去，两个动画一前一后，看着不同步。
+    func testFilmstripHighlightWaitsForTheImageToLandOnCanvas() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeTestPNG(to: root.appendingPathComponent("a.png"))
+        try writeTestPNG(to: root.appendingPathComponent("b.png"))
+        let settings = AppSettings(defaults: makeIsolatedDefaults())
+        settings.showsFilmstrip = true
+        let controller = MainWindowController(settings: settings)
+
+        controller.open(url: root.appendingPathComponent("a.png"))
+        for _ in 0..<500 where controller.navigationItemCountForTesting < 2 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        XCTAssertEqual(controller.filmstripHighlightedTitleForTesting, "a")
+
+        // 翻页这一步是同步的，解码还没回来，高亮必须还停在原地。
+        controller.showNextImageForTesting()
+        XCTAssertEqual(controller.currentImageURLForTesting?.lastPathComponent, "b.png", "导航状态已经翻过去了")
+        XCTAssertEqual(
+            controller.filmstripHighlightedTitleForTesting,
+            "a",
+            "画面还没换，高亮不该抢先挪走"
+        )
+
+        for _ in 0..<500 where controller.filmstripHighlightedTitleForTesting != "b" {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(controller.filmstripHighlightedTitleForTesting, "b", "图片落到画布后高亮才跟上")
+    }
+
     private func makeIsolatedDefaults() -> UserDefaults {
         UserDefaults(suiteName: "ImageViewAppTests.ChromeMaterial.\(UUID().uuidString)")!
     }

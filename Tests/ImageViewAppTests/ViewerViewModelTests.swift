@@ -8,6 +8,29 @@ import XCTest
 
 @MainActor
 final class ViewerViewModelTests: XCTestCase {
+    /// 预读要先解用户马上要看的那一张。
+    ///
+    /// 原来按下标从小到大排，往后翻时下一张排在第三个，
+    /// 一张大图一两百毫秒，等排到它翻页的手感已经断了。
+    func testPreloadOrderPutsTheNextImageFirstWhenPagingForward() {
+        let order = ViewerViewModel.preloadOrder(around: 5, in: 3...7, direction: .forward)
+
+        XCTAssertEqual(order, [6, 4, 7, 3])
+    }
+
+    func testPreloadOrderFollowsTheOtherDirectionWhenPagingBackward() {
+        let order = ViewerViewModel.preloadOrder(around: 5, in: 3...7, direction: .backward)
+
+        XCTAssertEqual(order, [4, 6, 3, 7])
+    }
+
+    /// 到了头一侧没有邻居，剩下那一侧照样按由近及远排。
+    func testPreloadOrderHandlesSequenceEdges() {
+        XCTAssertEqual(ViewerViewModel.preloadOrder(around: 0, in: 0...2, direction: .forward), [1, 2])
+        XCTAssertEqual(ViewerViewModel.preloadOrder(around: 9, in: 7...9, direction: .forward), [8, 7])
+        XCTAssertEqual(ViewerViewModel.preloadOrder(around: 4, in: 4...4, direction: .forward), [])
+    }
+
     func testDefaultViewModelsShareProcessImageCache() {
         let first = ViewerViewModel()
         let second = ViewerViewModel()
