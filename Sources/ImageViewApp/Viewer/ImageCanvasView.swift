@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 import ImageViewCore
 
 final class ImageCanvasView: NSView {
@@ -104,17 +105,26 @@ final class ImageCanvasView: NSView {
 
     /// 玻璃 chrome 压在画布上，底下得有东西才折射得出来。
     ///
-    /// 把当前图片缩成很小一张缓存下来，绘制时再放大铺满整个视图，
-    /// 放大过程本身就把它糊成一层柔和的底色。图片仍然完整画在上面，
-    /// 留白区域拿到的是这张图自己的颜色，而不是一块死板的灰。
+    /// 把当前图片缩小并高斯模糊成一层柔和的底色，铺满整个视图。图片仍然完整
+    /// 画在上面，留白区域拿到的是这张图自己的颜色，而不是一块死板的灰。
     private var backdropImage: CGImage?
 
-    /// 采样边长。取这么小是为了让放大后自然模糊，同时几乎不花时间。
-    static let backdropSampleSize = 24
+    /// 采样边长。缩到这么小几乎不花时间，柔和交给后面的高斯。
+    static let backdropSampleSize = 64
+
+    /// 高斯半径按采样边长的比例取，换采样尺寸时观感不变。
+    static let backdropBlurRatio: CGFloat = 0.22
 
     /// 底色的不透明度。压住一些，避免和图片本身抢注意力。
     static let backdropAlpha: CGFloat = 0.6
 
+    private static let backdropRenderContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    /// 把图片熬成一层柔和的底色。
+    ///
+    /// 只缩不糊是不够的。缩完再放大铺满整窗，双线性插值会在每两个采样点之间
+    /// 留下一道折痕，一片渐变里能看出网格，看着就是生硬。缩完真正做一次高斯，
+    /// 把这些接缝抹平，放大之后才是连续的。
     static func makeBackdrop(from source: CGImage, sampleSize: Int = backdropSampleSize) -> CGImage? {
         let side = max(1, sampleSize)
         guard let context = CGContext(
@@ -126,9 +136,17 @@ final class ImageCanvasView: NSView {
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
         ) else { return nil }
-        context.interpolationQuality = .medium
+        context.interpolationQuality = .high
         context.draw(source, in: CGRect(x: 0, y: 0, width: side, height: side))
-        return context.makeImage()
+        guard let downsampled = context.makeImage() else { return nil }
+
+        // 不先夹边的话，高斯会把画面外的透明像素混进来，四周压出一圈暗角。
+        let extent = CGRect(x: 0, y: 0, width: side, height: side)
+        let blurred = CIImage(cgImage: downsampled)
+            .clampedToExtent()
+            .applyingGaussianBlur(sigma: Double(CGFloat(side) * backdropBlurRatio))
+            .cropped(to: extent)
+        return backdropRenderContext.createCGImage(blurred, from: extent) ?? downsampled
     }
 
     /// 按短边铺满，长边溢出，保证整个视图都被盖住。

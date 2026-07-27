@@ -577,7 +577,10 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
         collectionView.delegate = self
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = true
-        collectionView.backgroundColors = [.windowBackgroundColor]
+        // 缩略图铺在上面的那层底。windowBackgroundColor 在浅色下接近纯白，
+        // 一格格图片压在上面显得生硬。underPageBackgroundColor 是系统给
+        // 「内容后面那一层」准备的颜色，深浅两套外观都自动跟着走。
+        collectionView.backgroundColors = [.underPageBackgroundColor]
         collectionView.register(FolderBrowserCellView.self, forItemWithIdentifier: FolderBrowserCellView.reuseIdentifier)
         collectionView.openSelectedItem = { [weak self] in
             self?.openFirstSelectedItem()

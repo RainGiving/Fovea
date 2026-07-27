@@ -207,6 +207,47 @@ final class ChromeMaterialTests: XCTestCase {
         XCTAssertEqual(controller.filmstripHighlightedTitleForTesting, "b", "图片落到画布后高亮才跟上")
     }
 
+    /// 连续浏览本身就是把整个序列铺开滚，再挂一条胶卷等于同一件事说两遍。
+    func testFilmstripStandsDownDuringContinuousReading() {
+        XCTAssertTrue(MainWindowController.shouldDisplayFilmstripOverlay(
+            isEnabled: true,
+            hasLoadedImage: true
+        ))
+        XCTAssertFalse(MainWindowController.shouldDisplayFilmstripOverlay(
+            isEnabled: true,
+            hasLoadedImage: true,
+            usesContinuousReading: true
+        ))
+    }
+
+    /// 连续浏览的底色由容器那层模糊底负责，文档本身不涂满一片近白。
+    func testContinuousReadingDocumentDoesNotPaintAnOpaqueBackground() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("page.png")
+        try writeTestPNG(to: imageURL, side: 400)
+        let settings = AppSettings(defaults: makeIsolatedDefaults())
+        settings.usesContinuousReading = true
+        let controller = MainWindowController(settings: settings)
+
+        controller.open(url: imageURL)
+        for _ in 0..<500 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        XCTAssertFalse(controller.isFilmstripVisibleForTesting, "连续浏览里胶卷条要让路")
+
+        // 页面窗口是异步算出来的，模糊底跟着那一步落地。
+        for _ in 0..<500 where !controller.continuousReadingHasBackdropForTesting {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(
+            controller.continuousReadingHasBackdropForTesting,
+            "容器要铺上由当前页熬出来的模糊底"
+        )
+    }
+
     private func makeIsolatedDefaults() -> UserDefaults {
         UserDefaults(suiteName: "ImageViewAppTests.ChromeMaterial.\(UUID().uuidString)")!
     }

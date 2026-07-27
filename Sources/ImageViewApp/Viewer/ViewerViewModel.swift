@@ -53,6 +53,12 @@ final class ViewerViewModel: ObservableObject {
     }
 
     private var lastNavigationDirection: NavigationDirection = .forward
+    /// 连续浏览已经解好的那一屏页面。
+    ///
+    /// 滚动时每 0.12 秒就会重算一次窗口，原来每次都从头解十三张，上一轮的成果
+    /// 全部丢掉。用户一直滚，就一直解不完，页面留在占位状态出不来。留住这一屏，
+    /// 窗口挪动时只解新进来的那几张。
+    private var continuousReadingPreviews: [ImageItem.ID: DecodedImage] = [:]
     private let scanContainingDirectory: @Sendable (URL) async throws -> [ImageItem]
     private let decodeImageAtURL: @Sendable (URL, SupportedImageFormat) throws -> DecodedImage
     private let loadImageAtURL: @Sendable (URL, SupportedImageFormat) async throws -> VersionedLoadedImage
@@ -182,6 +188,7 @@ final class ViewerViewModel: ObservableObject {
     func resetToEmptyState() {
         _ = beginDisplayRequest()
         clearEditHistory()
+        continuousReadingPreviews.removeAll()
         navigationState = nil
         currentImage = nil
         currentMetadata = nil
@@ -671,6 +678,8 @@ final class ViewerViewModel: ObservableObject {
             let image: DecodedImage?
             if item.id == current.id, let currentImage {
                 image = currentImage
+            } else if let cached = continuousReadingPreviews[item.id] {
+                image = cached
             } else {
                 // 连续浏览把整页缩到窗口宽度显示，用不着原尺寸。
                 // 一张 7952×5304 解全尺寸要 168 MB，512 MB 预算只装得下三张，
@@ -686,6 +695,8 @@ final class ViewerViewModel: ObservableObject {
                 decodedByteCost = overflow ? Int.max : nextCost
             }
         }
+        // 只留住这一屏窗口里的，滚出去的立刻放掉，内存不涨。
+        continuousReadingPreviews = decodedByID
         return state.items.map {
             ContinuousReadingPage(item: $0, image: decodedByID[$0.id])
         }

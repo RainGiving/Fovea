@@ -16,6 +16,11 @@ final class ContinuousReadingView: NSView {
     private let scrollView = NSScrollView()
     private let clipView = ContinuousReadingClipView()
     private let document = ContinuousReadingDocumentView()
+    /// 固定在容器上的模糊底，由当前那一页熬出来。页面在它上面滚动，
+    /// 和单图查看用的是同一层材质，连续浏览不再是一片生硬的近白。
+    private let backdropLayer = CALayer()
+    private var backdropImage: CGImage?
+    private var backdropSourceID: ImageItem.ID?
     private var currentItemID: ImageItem.ID?
     private var focusUpdateTimer: Timer?
     private var isApplyingPages = false
@@ -30,14 +35,24 @@ final class ContinuousReadingView: NSView {
     var testingDecodedPageCount: Int { document.pages.filter { $0.image != nil }.count }
     var testingPageURLs: [URL] { document.pages.map { $0.item.url } }
     var testingLastNearestLookupCount: Int { document.lastNearestLookupCount }
+    var testingHasBackdrop: Bool { backdropImage != nil && !backdropLayer.isHidden }
 
     override init(frame frameRect: NSRect = .zero) {
         super.init(frame: frameRect)
         wantsLayer = true
+        layer?.backgroundColor = NSColor.underPageBackgroundColor.cgColor
+        backdropLayer.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
+        backdropLayer.contentsGravity = .resize
+        backdropLayer.magnificationFilter = .linear
+        backdropLayer.opacity = Float(ImageCanvasView.backdropAlpha)
+        backdropLayer.isHidden = true
+        layer?.addSublayer(backdropLayer)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = false
+        // 裁剪视图默认自己涂一层不透明底，会盖住下面那层模糊底。
+        clipView.drawsBackground = false
         scrollView.contentView = clipView
         scrollView.documentView = document
         clipView.onBoundsOriginChanged = { [weak self] in self?.scheduleFocusUpdate() }
@@ -58,9 +73,29 @@ final class ContinuousReadingView: NSView {
 
     override func layout() {
         super.layout()
+        updateBackdropGeometry()
         let width = max(scrollView.contentSize.width, 1)
         let height = document.requiredHeight(for: width)
         document.frame = NSRect(x: 0, y: 0, width: width, height: max(height, scrollView.contentSize.height))
+    }
+
+    private func updateBackdropGeometry() {
+        guard let backdropImage else { return }
+        backdropLayer.frame = ImageCanvasView.aspectFillRect(
+            imageSize: CGSize(width: backdropImage.width, height: backdropImage.height),
+            in: bounds
+        )
+    }
+
+    /// 模糊底跟着当前那一页换。同一页不重复熬。
+    private func updateBackdrop(for page: ContinuousReadingPage?) {
+        guard let page, let image = page.image else { return }
+        guard page.item.id != backdropSourceID else { return }
+        backdropSourceID = page.item.id
+        backdropImage = ImageCanvasView.makeBackdrop(from: image.cgImage)
+        backdropLayer.contents = backdropImage
+        backdropLayer.isHidden = backdropImage == nil
+        updateBackdropGeometry()
     }
 
     func apply(pages: [ContinuousReadingPage], currentItemID: ImageItem.ID?) {
@@ -87,6 +122,7 @@ final class ContinuousReadingView: NSView {
                   let frame = document.frame(for: currentItemID) {
             scroll(toDocumentY: frame.minY + previousOffsetFromPage)
         }
+        updateBackdrop(for: pages.first { $0.item.id == currentItemID } ?? pages.first { $0.image != nil })
         isApplyingPages = false
     }
 
@@ -194,10 +230,8 @@ private final class ContinuousReadingDocumentView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 底色跟随系统外观。以前写死黑色，配上很淡的占位块之后
-        // 未解码的页面看起来就是一整片黑，像是坏了。
-        NSColor.windowBackgroundColor.setFill()
-        dirtyRect.fill()
+        // 底色由容器那层模糊底负责，文档本身透明。
+        // 以前在这里涂满 windowBackgroundColor，浅色下就是一片生硬的近白。
         let frames = pageFrames(for: bounds.width)
         var lowerBound = 0
         var upperBound = frames.count

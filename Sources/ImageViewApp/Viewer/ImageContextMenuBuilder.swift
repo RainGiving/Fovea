@@ -47,7 +47,7 @@ enum ImageContextMenuBuilder {
             Command(
                 titleKey: "menu.image.edit",
                 action: #selector(MainWindowController.startEditingImage(_:)),
-                symbolName: "slider.horizontal.below.rectangle"
+                symbolName: "crop.rotate"
             )
         ],
         [
@@ -89,17 +89,9 @@ enum ImageContextMenuBuilder {
                 symbolName: "trash"
             )
         ],
+        // 胶卷、编辑、连续浏览已经是上边栏上的按钮，这里不再重复。
+        // 信息面板的开关在底栏右下角，和这一组的其他视图开关放在一起更好找。
         [
-            Command(
-                titleKey: "menu.view.showFilmstrip",
-                action: #selector(MainWindowController.toggleFilmstrip(_:)),
-                symbolName: "film"
-            ),
-            Command(
-                titleKey: "menu.view.continuousReading",
-                action: #selector(MainWindowController.toggleContinuousReading(_:)),
-                symbolName: "scroll"
-            ),
             Command(
                 titleKey: "menu.view.showInfo",
                 action: #selector(MainWindowController.toggleInspector(_:)),

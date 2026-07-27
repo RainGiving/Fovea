@@ -72,12 +72,23 @@ final class MainWindowControllerTests: XCTestCase {
         XCTAssertFalse(button.isOnState)
     }
 
-    func testFilmstripToggleIsReachableFromTheContextMenu() {
-        let commands = ImageContextMenuBuilder.sections.flatMap { $0 }
+    /// 更多菜单只放上边栏上没有的功能，已经有按钮的不再重复一遍。
+    func testContextMenuDoesNotRepeatWhatTheTitleBarAlreadyOffers() {
+        let actions = ImageContextMenuBuilder.sections.flatMap { $0 }.map(\.action)
 
-        XCTAssertTrue(commands.contains {
-            $0.action == #selector(MainWindowController.toggleFilmstrip(_:))
-        })
+        XCTAssertFalse(actions.contains(#selector(MainWindowController.toggleFilmstrip(_:))))
+        XCTAssertFalse(actions.contains(#selector(MainWindowController.toggleContinuousReading(_:))))
+        // 信息面板的开关不在上边栏，留在菜单里。
+        XCTAssertTrue(actions.contains(#selector(MainWindowController.toggleInspector(_:))))
+    }
+
+    /// 右键菜单的编辑图标和上边栏那颗保持一致，同一件事只有一个图形。
+    func testContextMenuEditUsesTheSameSymbolAsTheTitleBarButton() {
+        let editCommand = ImageContextMenuBuilder.sections.flatMap { $0 }.first {
+            $0.action == #selector(MainWindowController.startEditingImage(_:))
+        }
+
+        XCTAssertEqual(editCommand?.symbolName, "crop.rotate")
     }
 
     func testOpenRequestMarksWindowAssignedBeforeDecodeCompletes() {
@@ -1441,8 +1452,8 @@ final class MainWindowControllerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: fixture.folder) }
         let controller = fixture.controller
 
-        // 网格、胶卷开关、编辑、更多。
-        XCTAssertEqual(controller.titleBarControlsStackForTesting.arrangedSubviews.count, 4)
+        // 网格、胶卷开关、编辑、连续浏览、更多。
+        XCTAssertEqual(controller.titleBarControlsStackForTesting.arrangedSubviews.count, 5)
         XCTAssertEqual(
             controller.titleBarControlsStackForTesting.arrangedSubviews.first,
             controller.titleBarGridButtonForTesting
@@ -1454,6 +1465,10 @@ final class MainWindowControllerTests: XCTestCase {
         XCTAssertEqual(
             controller.titleBarControlsStackForTesting.arrangedSubviews[2],
             controller.titleBarEditButtonForTesting
+        )
+        XCTAssertEqual(
+            controller.titleBarControlsStackForTesting.arrangedSubviews[3],
+            controller.titleBarContinuousReadingButtonForTesting
         )
         XCTAssertNotNil(controller.titleBarGridButtonForTesting.image)
         XCTAssertFalse(controller.titleBarGridButtonForTesting.isEnabled)

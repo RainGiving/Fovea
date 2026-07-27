@@ -150,6 +150,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private let titleBarGridButton = HoverToolbarButton()
     private let titleBarFilmstripButton = HoverToolbarButton()
     private let titleBarEditButton = HoverToolbarButton()
+    private let titleBarContinuousReadingButton = HoverToolbarButton()
     private let titleBarMoreButton = HoverToolbarButton()
     private let titleBarControlsStack = NSStackView()
     private lazy var titleBarDoubleClickRecognizer = NSClickGestureRecognizer(
@@ -2136,7 +2137,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             isEnabled: settings.showsFilmstrip,
             hasLoadedImage: hasLoadedImage ?? (viewModel.currentImage != nil),
             isCropping: cropOverlay.isCropping,
-            isFolderBrowserMode: isFolderBrowserMode
+            isFolderBrowserMode: isFolderBrowserMode,
+            usesContinuousReading: settings.usesContinuousReading
         )
         guard shouldShow else {
             hideFilmstripOverlay(immediately: !animated)
@@ -2348,6 +2350,15 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         )
         titleBarEditButton.setAccessibilityRole(.checkBox)
         titleBarControlsStack.addArrangedSubview(titleBarEditButton)
+        let continuousReadingText = AppStrings.text("menu.view.continuousReading")
+        configureTitleBarButton(
+            titleBarContinuousReadingButton,
+            symbolName: "scroll",
+            accessibilityDescription: continuousReadingText,
+            action: #selector(toggleContinuousReading(_:))
+        )
+        titleBarContinuousReadingButton.setAccessibilityRole(.checkBox)
+        titleBarControlsStack.addArrangedSubview(titleBarContinuousReadingButton)
         let moreText = AppStrings.text("titleBar.more")
         configureTitleBarButton(
             titleBarMoreButton,
@@ -2433,6 +2444,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         ) || isEditingImage
         titleBarEditButton.isOnState = isEditingImage
         titleBarEditButton.setAccessibilityValue(isEditingImage)
+        // 连续浏览也是开关，条件和胶卷一样：网格模式里没有序列可滚。
+        titleBarContinuousReadingButton.isEnabled = !isFolderBrowserMode && !isEditingImage
+        titleBarContinuousReadingButton.isOnState = settings.usesContinuousReading
+        titleBarContinuousReadingButton.setAccessibilityValue(settings.usesContinuousReading)
     }
 
     private func updateWindowTitle(viewerTitle: String) {
@@ -2738,6 +2753,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
     func revealFullScreenChromeForTesting() { revealFullScreenChromeIfNeeded() }
     var isFilmstripVisibleForTesting: Bool { !filmstripOverlayView.isHidden }
+    var continuousReadingHasBackdropForTesting: Bool { continuousReadingView.testingHasBackdrop }
     var filmstripOverlayFrameForTesting: NSRect { filmstripOverlayView.frame }
     var inspectorFrameForTesting: NSRect { inspectorView.frame }
     // 这两个要读浮层内部的调试出口，那些出口只在 DEBUG 下存在。
@@ -2753,6 +2769,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var bottomBarFrameForTesting: NSRect { bottomBarView.frame }
     var titleBarFilmstripButtonForTesting: HoverToolbarButton { titleBarFilmstripButton }
     var titleBarEditButtonForTesting: HoverToolbarButton { titleBarEditButton }
+    var titleBarContinuousReadingButtonForTesting: HoverToolbarButton { titleBarContinuousReadingButton }
     var hasKeyMonitorForTesting: Bool { keyMonitor != nil }
     var isPageControlsVisibleForTesting: Bool { !pageNavigationOverlayView.isHidden }
     var folderBrowserItemCountForTesting: Int { folderBrowserView.testingItemCount }
@@ -2908,14 +2925,17 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     /// 胶卷条开着就一直在，不看指针也不看缩放。
-    /// 只有裁切时它会挡住选区，网格模式没有「当前这一张」，这两种情况才让路。
+    ///
+    /// 裁切时它会挡住选区；网格模式没有「当前这一张」；连续浏览本身就是把整个
+    /// 序列铺开滚，再加一条胶卷等于同一件事说两遍。这三种情况让路。
     static func shouldDisplayFilmstripOverlay(
         isEnabled: Bool,
         hasLoadedImage: Bool,
         isCropping: Bool = false,
-        isFolderBrowserMode: Bool = false
+        isFolderBrowserMode: Bool = false,
+        usesContinuousReading: Bool = false
     ) -> Bool {
-        isEnabled && hasLoadedImage && !isCropping && !isFolderBrowserMode
+        isEnabled && hasLoadedImage && !isCropping && !isFolderBrowserMode && !usesContinuousReading
     }
 
     static func shouldDisplayPageControls(itemCount: Int, isCropping: Bool) -> Bool {
