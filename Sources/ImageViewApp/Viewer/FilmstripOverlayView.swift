@@ -1,16 +1,27 @@
 import AppKit
 
+/// 浮在图片上方的胶卷条容器。
+///
+/// 材质由玻璃负责。胶卷内容加到 `contentView` 上，才会被放进玻璃里。
+/// 显示与否只看开关，所以这里不再跟踪指针。
 @MainActor
 final class FilmstripOverlayView: NSView {
-    static var backgroundColor: NSColor { .windowBackgroundColor }
-    static var borderColor: NSColor { .separatorColor }
-    var onPointerEntered: (() -> Void)?
-    var onPointerExited: (() -> Void)?
-    private var pointerTrackingArea: NSTrackingArea?
+    private let panel = GlassPanelView(cornerRadius: GlassMetrics.panelCornerRadius)
+
+    /// 胶卷内容挂在这里，位于玻璃内部。
+    var contentView: NSView { panel.contentView }
 
     override init(frame frameRect: NSRect = .zero) {
         super.init(frame: frameRect)
         wantsLayer = true
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(panel)
+        NSLayoutConstraint.activate([
+            panel.leadingAnchor.constraint(equalTo: leadingAnchor),
+            panel.trailingAnchor.constraint(equalTo: trailingAnchor),
+            panel.topAnchor.constraint(equalTo: topAnchor),
+            panel.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
     }
 
     @available(*, unavailable)
@@ -18,47 +29,9 @@ final class FilmstripOverlayView: NSView {
         nil
     }
 
-    override var wantsUpdateLayer: Bool { true }
-
-    static func borderWidth(forBackingScaleFactor scaleFactor: CGFloat) -> CGFloat {
-        1 / max(1, scaleFactor)
+    var cornerRadius: CGFloat {
+        get { panel.cornerRadius }
+        set { panel.cornerRadius = newValue }
     }
 
-    override func updateTrackingAreas() {
-        if let pointerTrackingArea {
-            removeTrackingArea(pointerTrackingArea)
-        }
-
-        let options: NSTrackingArea.Options = [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited]
-        let trackingArea = NSTrackingArea(rect: .zero, options: options, owner: self, userInfo: nil)
-        addTrackingArea(trackingArea)
-        pointerTrackingArea = trackingArea
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        onPointerEntered?()
-        super.mouseEntered(with: event)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        onPointerExited?()
-        super.mouseExited(with: event)
-    }
-
-    override func updateLayer() {
-        layer?.backgroundColor = Self.backgroundColor.cgColor
-        layer?.cornerRadius = 10
-        layer?.borderWidth = Self.borderWidth(forBackingScaleFactor: window?.backingScaleFactor ?? layer?.contentsScale ?? 1)
-        layer?.borderColor = Self.borderColor.cgColor
-        layer?.shadowColor = NSColor.black.withAlphaComponent(0.2).cgColor
-        layer?.shadowOpacity = 0.55
-        layer?.shadowRadius = 6
-        layer?.shadowOffset = CGSize(width: 0, height: -1)
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
 }

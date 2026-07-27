@@ -55,18 +55,17 @@ final class PageNavigationButton: NSButton {
         refreshAppearance()
     }
 
+    /// 玻璃 bezel 自己负责材质和按压反馈，这里只调符号的颜色：
+    /// 悬停时提到强调色，禁用时压到三级灰。
     func refreshAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let backgroundColor: NSColor
-            if isPressed {
-                backgroundColor = .controlAccentColor.withAlphaComponent(0.24)
-            } else if isHovered {
-                backgroundColor = .controlAccentColor.withAlphaComponent(0.15)
+            if !isEnabled {
+                contentTintColor = .tertiaryLabelColor
+            } else if isPressed || isHovered {
+                contentTintColor = .controlAccentColor
             } else {
-                backgroundColor = PageNavigationOverlayView.backgroundColor.withAlphaComponent(0.92)
+                contentTintColor = .labelColor
             }
-            layer?.backgroundColor = backgroundColor.cgColor
-            contentTintColor = isEnabled ? .labelColor : .tertiaryLabelColor
         }
         needsDisplay = true
     }
@@ -83,8 +82,6 @@ final class PageNavigationButton: NSButton {
 @MainActor
 final class PageNavigationOverlayView: NSView {
     static let controlSize = CGSize(width: 44, height: 64)
-    static var backgroundColor: NSColor { .windowBackgroundColor }
-    static var borderColor: NSColor { .separatorColor }
 
     var onPrevious: (() -> Void)?
     var onNext: (() -> Void)?
@@ -130,8 +127,16 @@ final class PageNavigationOverlayView: NSView {
         nil
     }
 
-    static func borderWidth(forBackingScaleFactor scaleFactor: CGFloat) -> CGFloat {
-        1 / max(1, scaleFactor)
+    /// 指针此刻是否真的压在某颗按钮上。
+    ///
+    /// 不能只靠 mouseEntered / mouseExited 记状态。控件隐藏期间指针移进来不会
+    /// 产生进入事件，等控件淡入时指针已经停在按钮上，程序却仍以为指针在别处，
+    /// 于是自动隐藏照常触发，用户点下去就落空。这里直接查当前鼠标位置兜底。
+    var isPointerOverControls: Bool {
+        guard let window, !isHidden else { return false }
+        let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let local = convert(windowPoint, from: nil)
+        return [previousButton, nextButton].contains { !$0.isHidden && $0.frame.contains(local) }
     }
 
     func update(previousEnabled: Bool, nextEnabled: Bool) {
@@ -140,11 +145,13 @@ final class PageNavigationOverlayView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
+        // 传进来的点在父视图坐标系里，按钮的 frame 在本视图坐标系里，
+        // 中间这次换算不能省。少了它，可点区域会整体偏移浮层原点那么多，
+        // 正好是下边栏的高度，指针压在按钮上半截时点下去落空，
+        // 往下挪一点又能点中，看起来就是按钮偶发失灵。
+        let local = superview.map { convert(point, from: $0) } ?? point
         for button in [previousButton, nextButton] where !button.isHidden {
-            // NSView.hitTest expects a point in the receiver's superview
-            // coordinate system. Both buttons are direct children, so the
-            // overlay point must be passed through unchanged.
-            if let hitView = button.hitTest(point) { return hitView }
+            if let hitView = button.hitTest(local) { return hitView }
         }
         return nil
     }
@@ -177,13 +184,14 @@ final class PageNavigationOverlayView: NSView {
 
     override func layout() {
         super.layout()
-        updateButtonLayers()
         updateTrackingAreas()
     }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        updateButtonLayers()
+        for button in [previousButton, nextButton] {
+            button.refreshAppearance()
+        }
     }
 
     @objc private func showPrevious() {
@@ -207,27 +215,20 @@ final class PageNavigationOverlayView: NSView {
             accessibilityDescription: description
         )?.withSymbolConfiguration(symbolConfiguration)
         button.imageScaling = .scaleProportionallyDown
-        button.bezelStyle = .regularSquare
-        button.isBordered = false
+        // 玻璃 bezel 自带材质、圆角和阴影，不再手工画图层。
+        button.bezelStyle = .glass
+        button.isBordered = true
         button.wantsLayer = true
         button.target = self
         button.action = action
         button.toolTip = description
         button.focusRingType = .default
-    }
-
-    private func updateButtonLayers() {
-        let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 1
-        for button in [previousButton, nextButton] {
-            button.layer?.cornerRadius = 14
-            button.layer?.borderWidth = Self.borderWidth(forBackingScaleFactor: scale)
-            button.layer?.borderColor = Self.borderColor.cgColor
-            button.layer?.shadowColor = NSColor.black.withAlphaComponent(0.2).cgColor
-            button.layer?.shadowOpacity = 0.34
-            button.layer?.shadowRadius = 7
-            button.layer?.shadowOffset = CGSize(width: 0, height: -2)
-            button.refreshAppearance()
+        if let cell = button.cell as? NSButtonCell {
+            cell.isBordered = true
         }
+        // 符号颜色由 refreshAppearance 决定，构建时先定一次，
+        // 否则要等到第一次悬停才会着色。
+        (button as? PageNavigationButton)?.refreshAppearance()
     }
 
     #if DEBUG

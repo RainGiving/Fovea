@@ -120,6 +120,11 @@ final class BatchRenameSheetController: NSWindowController, NSTextFieldDelegate 
         buttonStack.alignment = .centerY
         buttonStack.spacing = 8
         let cancelButton = NSButton(title: AppStrings.text("batchRename.button.cancel"), target: self, action: #selector(cancel(_:)))
+        cancelButton.bezelStyle = .glass
+        cancelButton.setAccessibilityLabel(cancelButton.title)
+        renameButton.setAccessibilityLabel(renameButton.title)
+        renameButton.bezelStyle = .glass
+        renameButton.tintProminence = .primary
         renameButton.target = self
         renameButton.action = #selector(confirm(_:))
         renameButton.keyEquivalent = "\r"
@@ -136,14 +141,16 @@ final class BatchRenameSheetController: NSWindowController, NSTextFieldDelegate 
         contentStack.addArrangedSubview(previewTitle)
         contentStack.addArrangedSubview(previewStack)
         contentStack.addArrangedSubview(buttonStack)
-        window.contentView = NSView()
-        window.contentView?.addSubview(contentStack)
+        // 先拿住这个视图再建约束，省掉四次强制解包。
+        let host = NSView()
+        window.contentView = host
+        host.addSubview(contentStack)
 
         NSLayoutConstraint.activate([
-            contentStack.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 20),
-            contentStack.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -20),
-            contentStack.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 20),
-            contentStack.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor, constant: -20),
+            contentStack.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 20),
+            contentStack.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -20),
+            contentStack.topAnchor.constraint(equalTo: host.topAnchor, constant: 20),
+            contentStack.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -20),
             baseNameField.widthAnchor.constraint(greaterThanOrEqualToConstant: 260),
             startNumberField.widthAnchor.constraint(equalToConstant: 80),
             paddingField.widthAnchor.constraint(equalToConstant: 80)

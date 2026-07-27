@@ -137,9 +137,7 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+    required init?(coder: NSCoder) { nil }
 
     override func layout() {
         super.layout()
@@ -486,6 +484,7 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
         renameButton.target = self
         renameButton.action = #selector(renameClicked(_:))
         for button in [moveButton, renameButton, trashButton] {
+            button.bezelStyle = .glass
             button.toolTip = button.title
             button.setAccessibilityLabel(button.title)
         }
@@ -510,14 +509,14 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
         operationStatusLabel.isHidden = true
         undoOperationButton.title = AppStrings.text("folderBrowser.operation.undo")
         undoOperationButton.translatesAutoresizingMaskIntoConstraints = false
-        undoOperationButton.bezelStyle = .rounded
+        undoOperationButton.bezelStyle = .glass
         undoOperationButton.controlSize = .small
         undoOperationButton.target = self
         undoOperationButton.action = #selector(undoOperationClicked(_:))
         undoOperationButton.setAccessibilityLabel(undoOperationButton.title)
         undoOperationButton.isHidden = true
         operationDetailsButton.title = AppStrings.text("folderBrowser.operation.viewDetails")
-        operationDetailsButton.bezelStyle = .rounded
+        operationDetailsButton.bezelStyle = .glass
         operationDetailsButton.controlSize = .small
         operationDetailsButton.target = self
         operationDetailsButton.action = #selector(showOperationDetailsClicked(_:))
@@ -533,7 +532,7 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
         operationProgressLabel.font = .systemFont(ofSize: 11, weight: .medium)
         operationProgressLabel.textColor = .secondaryLabelColor
         cancelOperationButton.title = AppStrings.text("folderBrowser.progress.cancel")
-        cancelOperationButton.bezelStyle = .rounded
+        cancelOperationButton.bezelStyle = .glass
         cancelOperationButton.controlSize = .small
         cancelOperationButton.target = self
         cancelOperationButton.action = #selector(cancelOperationClicked(_:))
@@ -606,11 +605,12 @@ final class FolderBrowserView: NSView, NSCollectionViewDataSource, NSCollectionV
         stateMessageLabel.textColor = .secondaryLabelColor
         stateMessageLabel.alignment = .center
         stateMessageLabel.maximumNumberOfLines = 3
-        primaryRecoveryButton.bezelStyle = .rounded
+        primaryRecoveryButton.bezelStyle = .glass
+        primaryRecoveryButton.tintProminence = .primary
         primaryRecoveryButton.keyEquivalent = "\r"
         primaryRecoveryButton.target = self
         primaryRecoveryButton.action = #selector(primaryRecoveryClicked(_:))
-        secondaryRecoveryButton.bezelStyle = .rounded
+        secondaryRecoveryButton.bezelStyle = .glass
         secondaryRecoveryButton.target = self
         secondaryRecoveryButton.action = #selector(secondaryRecoveryClicked(_:))
         let recoveryButtons = NSStackView(views: [primaryRecoveryButton, secondaryRecoveryButton])

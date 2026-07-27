@@ -33,6 +33,12 @@ final class ViewerViewModel: ObservableObject {
     @Published private(set) var navigationState: NavigationState?
     @Published private(set) var currentImage: DecodedImage?
     @Published private(set) var currentMetadata: ImageMetadata?
+
+    /// 当前图片的像素尺寸。判断裁切框是否等于整张图时要用。
+    var currentImagePixelSize: CGSize? {
+        guard let currentImage else { return nil }
+        return CGSize(width: currentImage.cgImage.width, height: currentImage.cgImage.height)
+    }
     @Published private(set) var errorMessage: String?
     @Published private(set) var displayTitle = "ImageView"
     @Published private(set) var hasUnsavedEdits = false
@@ -659,7 +665,10 @@ final class ViewerViewModel: ObservableObject {
             if item.id == current.id, let currentImage {
                 image = currentImage
             } else {
-                image = try? await display(url: item.url, format: item.format).image
+                // 连续浏览把整页缩到窗口宽度显示，用不着原尺寸。
+                // 一张 7952×5304 解全尺寸要 168 MB，512 MB 预算只装得下三张，
+                // 这正是之前只能看到三张图的原因。降采样后单页约 11 MB。
+                image = try? await loadPreviewAtURL(item.url, item.format)
             }
             guard navigationState?.currentItem?.id == current.id else { return [] }
             guard let image else { continue }
@@ -865,12 +874,17 @@ final class ViewerViewModel: ObservableObject {
         }
     }
 
+    /// 只对解码便宜的静态格式做预读。
+    ///
+    /// 动图、序列图和矢量图预读没有意义，RAW、PSD、EXR 解一张的代价太高，
+    /// 提前解会把内存和 CPU 顶起来，留到真正翻到那一张再说。
     static func canPreloadInBackground(_ format: SupportedImageFormat) -> Bool {
         switch format {
-        case .gif, .svg, .webp, .avif:
-            return false
-        case .jpeg, .png, .tiff, .bmp, .heic, .heif:
+        case .jpeg, .png, .tiff, .bmp, .heic, .heif, .jpeg2000, .jpegXL,
+             .ico, .targa, .radiance, .icns, .netpbm, .dds, .sgi, .avci:
             return true
+        case .gif, .svg, .webp, .avif, .heicSequence, .mpo, .rawPhoto, .psd, .openEXR:
+            return false
         }
     }
 

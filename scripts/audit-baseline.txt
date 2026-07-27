@@ -1,0 +1,16 @@
+# 审计基线：已知且已判定可接受的条目。
+#
+# 格式：规则|文件|理由
+# 一行一条。审计跑到匹配的条目时降级为提示，不再计入警告。
+# 新出现的同类问题不在基线里，仍然会正常报出来。
+#
+# 加入基线的门槛：这段代码确实长，但是线性的声明式构建，
+# 拆开之后只是把顺序阅读换成来回跳转，没有实际收益。
+
+function.size|Sources/ImageViewApp/MainWindowController.swift|视图创建与回调接线，顺序执行一次，拆开反而难追
+function.size|Sources/ImageViewApp/AppDelegate.swift|主菜单逐项声明，结构即内容
+function.size|Sources/ImageViewApp/FolderBrowser/FolderBrowserView.swift|工具栏与状态视图的构建，线性声明
+function.size|Sources/ImageViewApp/Settings/PreferencesWindowController.swift|设置面板逐项声明
+function.size|Sources/ImageViewApp/Viewer/ViewerViewModel.swift|打开图片的完整流程，中间状态多，拆开要传一堆参数
+function.size|Sources/ImageViewApp/FolderBrowser/FolderBrowserViewModel.swift|批量重命名的执行与回滚，事务性逻辑不宜切断
+file.size|Sources/ImageViewApp/MainWindowController.swift|窗口协调者，职责边界清晰但条目多，已在逐步分离

@@ -5,6 +5,81 @@ import XCTest
 
 @MainActor
 final class MainWindowControllerTests: XCTestCase {
+    func testFilmstripSitsAboveBottomBarAndNeverCoversIt() throws {
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+        let window = try XCTUnwrap(controller.window)
+        window.setContentSize(NSSize(width: 1100, height: 760))
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        let filmstrip = controller.filmstripOverlayFrameForTesting
+        let bottomBar = controller.bottomBarFrameForTesting
+
+        XCTAssertFalse(filmstrip.intersects(bottomBar))
+        // rootView 未翻转，y 向上增长，胶卷条的下沿必须高于下边栏的上沿。
+        XCTAssertGreaterThanOrEqual(filmstrip.minY, bottomBar.maxY)
+    }
+
+    /// 没有图可编辑的时候按钮不该可按，也不该亮着。
+    func testTitleBarEditButtonStartsDisabledAndUnlit() {
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+        let button = controller.titleBarEditButtonForTesting
+
+        XCTAssertNotNil(button.image)
+        XCTAssertFalse(button.isEnabled)
+        XCTAssertFalse(button.isOnState)
+    }
+
+    func testTitleBarEditButtonAvailabilityFollowsTheCurrentMode() {
+        XCTAssertTrue(MainWindowController.canEditFromTitleBar(
+            canEditCurrentImage: true,
+            isFolderBrowserMode: false,
+            usesContinuousReading: false
+        ))
+        // 文件夹网格里没有「当前这一张」，连续阅读也不进编辑。
+        XCTAssertFalse(MainWindowController.canEditFromTitleBar(
+            canEditCurrentImage: true,
+            isFolderBrowserMode: true,
+            usesContinuousReading: false
+        ))
+        XCTAssertFalse(MainWindowController.canEditFromTitleBar(
+            canEditCurrentImage: true,
+            isFolderBrowserMode: false,
+            usesContinuousReading: true
+        ))
+        XCTAssertFalse(MainWindowController.canEditFromTitleBar(
+            canEditCurrentImage: false,
+            isFolderBrowserMode: false,
+            usesContinuousReading: false
+        ))
+    }
+
+    func testTitleBarFilmstripButtonMirrorsTheSetting() {
+        let settings = AppSettings(defaults: makeIsolatedDefaults())
+        settings.showsFilmstrip = false
+        let controller = MainWindowController(settings: settings)
+        let button = controller.titleBarFilmstripButtonForTesting
+
+        XCTAssertFalse(button.isOnState)
+
+        controller.toggleFilmstrip(nil)
+
+        XCTAssertTrue(settings.showsFilmstrip)
+        XCTAssertTrue(button.isOnState)
+
+        controller.toggleFilmstrip(nil)
+
+        XCTAssertFalse(settings.showsFilmstrip)
+        XCTAssertFalse(button.isOnState)
+    }
+
+    func testFilmstripToggleIsReachableFromTheContextMenu() {
+        let commands = ImageContextMenuBuilder.sections.flatMap { $0 }
+
+        XCTAssertTrue(commands.contains {
+            $0.action == #selector(MainWindowController.toggleFilmstrip(_:))
+        })
+    }
+
     func testOpenRequestMarksWindowAssignedBeforeDecodeCompletes() {
         let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
         XCTAssertFalse(controller.hasAssignedOpenRequest)
@@ -412,6 +487,113 @@ final class MainWindowControllerTests: XCTestCase {
         XCTAssertFalse(controller.isCroppingForTesting)
     }
 
+    /// 标题栏那颗编辑按钮是开关：按一下进编辑并亮起，再按一下退出并熄灭。
+    func testTitleBarEditButtonTogglesEditingAndTracksItsState() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("editable.png")
+        try writeTestPNG(to: imageURL)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        let button = controller.titleBarEditButtonForTesting
+
+        XCTAssertTrue(button.isEnabled)
+        XCTAssertFalse(button.isOnState)
+
+        button.performClick(nil)
+        XCTAssertTrue(controller.isCroppingForTesting)
+        XCTAssertTrue(button.isOnState)
+
+        button.performClick(nil)
+        XCTAssertFalse(controller.isCroppingForTesting)
+        XCTAssertFalse(button.isOnState)
+    }
+
+    /// 翻到下一张、解码完成之后，编辑按钮必须还能按。
+    ///
+    /// 能不能编辑取决于 loadPhase 走到 full，而 loadPhase 自己原来不触发按钮刷新，
+    /// 全靠导航状态那一路顺带带到。这条盯住的是最终状态一致，不是那条时序本身。
+    func testTitleBarEditButtonStaysEnabledAfterNavigatingToAnotherImage() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = root.appendingPathComponent("a.png")
+        let second = root.appendingPathComponent("b.png")
+        try writeTestPNG(to: first)
+        try writeTestPNG(to: second)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+
+        controller.open(url: first)
+        // 整套测试一起跑时解码会慢，等待额度给宽一点。
+        for _ in 0..<500 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        XCTAssertTrue(controller.titleBarEditButtonForTesting.isEnabled)
+
+        // 打开时先发一份只含当前项的导航状态，扫完目录才有第二张可翻。
+        for _ in 0..<500 where controller.navigationItemCountForTesting < 2 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(controller.navigationItemCountForTesting, 2, "先等目录扫描把两张都列出来")
+
+        controller.showNextImageForTesting()
+        let target = second.standardizedFileURL.resolvingSymlinksInPath()
+        // 等到新的一张真的解完，视图模型认为可以编辑为止。
+        for _ in 0..<500 where !(
+            controller.currentImageURLForTesting?.resolvingSymlinksInPath() == target
+                && controller.canEditCurrentImageForTesting
+        ) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(
+            controller.currentImageURLForTesting?.resolvingSymlinksInPath(),
+            target,
+            "先确认真的翻过去了"
+        )
+        XCTAssertTrue(controller.canEditCurrentImageForTesting, "视图模型这一侧应当已经可以编辑")
+        XCTAssertTrue(controller.titleBarEditButtonForTesting.isEnabled, "翻页之后编辑按钮不该变灰")
+    }
+
+    /// 按钮要真的能被鼠标命中。performClick 绕开了事件派发，测不出这一层。
+    func testTitleBarButtonsAreReachableByRealHitTesting() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("hittest.png")
+        try writeTestPNG(to: imageURL)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+        let window = try XCTUnwrap(controller.window)
+
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let rootView = try XCTUnwrap(window.contentView)
+        rootView.layoutSubtreeIfNeeded()
+
+        for button: NSButton in [
+            controller.titleBarGridButtonForTesting,
+            controller.titleBarFilmstripButtonForTesting,
+            controller.titleBarEditButtonForTesting
+        ] {
+            XCTAssertGreaterThan(button.bounds.width, 0, "按钮要先有尺寸")
+            let center = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+            let hit = rootView.hitTest(center)
+            XCTAssertTrue(
+                hit === button || hit?.isDescendant(of: button) == true,
+                "点在 \(button.toolTip ?? "?") 上应当命中它自己，实际命中 \(String(describing: hit))"
+            )
+        }
+    }
+
     func testFullImageLoadProducesOneConciseAccessibilityAnnouncement() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -647,50 +829,48 @@ final class MainWindowControllerTests: XCTestCase {
         XCTAssertEqual(item.state, .on)
     }
 
-    func testFilmstripRequiresEnabledLoadedFitScaleAndPointerActivity() {
+    /// 胶卷条打开就一直在。指针停在哪、图片放大到多少，都不该让它自己消失。
+    func testFilmstripStaysVisibleRegardlessOfPointerOrZoom() {
         XCTAssertTrue(MainWindowController.shouldDisplayFilmstripOverlay(
             isEnabled: true,
-            hasLoadedImage: true,
-            canvasScale: 1.01,
-            pointerIsActive: true
-        ))
-        XCTAssertFalse(MainWindowController.shouldDisplayFilmstripOverlay(
-            isEnabled: true,
-            hasLoadedImage: false,
-            canvasScale: 1,
-            pointerIsActive: true
-        ))
-        XCTAssertFalse(MainWindowController.shouldDisplayFilmstripOverlay(
-            isEnabled: true,
-            hasLoadedImage: true,
-            canvasScale: 1.011,
-            pointerIsActive: true
+            hasLoadedImage: true
         ))
         XCTAssertFalse(MainWindowController.shouldDisplayFilmstripOverlay(
             isEnabled: false,
-            hasLoadedImage: true,
-            canvasScale: 1,
-            pointerIsActive: true
+            hasLoadedImage: true
         ))
         XCTAssertFalse(MainWindowController.shouldDisplayFilmstripOverlay(
             isEnabled: true,
-            hasLoadedImage: true,
-            canvasScale: 1,
-            pointerIsActive: false
+            hasLoadedImage: false
         ))
+        // 裁切时它会压住选区，网格模式没有「当前这一张」，这两种情况才让路。
         XCTAssertFalse(MainWindowController.shouldDisplayFilmstripOverlay(
             isEnabled: true,
             hasLoadedImage: true,
-            canvasScale: 1,
-            pointerIsActive: true,
             isCropping: true
+        ))
+        XCTAssertFalse(MainWindowController.shouldDisplayFilmstripOverlay(
+            isEnabled: true,
+            hasLoadedImage: true,
+            isFolderBrowserMode: true
         ))
     }
 
-    func testFilmstripDoesNotScheduleAutoHideWhilePointerIsOverOverlay() {
-        XCTAssertFalse(MainWindowController.shouldAutoHideFilmstrip(isEnabled: true, pointerIsOverOverlay: true))
-        XCTAssertTrue(MainWindowController.shouldAutoHideFilmstrip(isEnabled: true, pointerIsOverOverlay: false))
-        XCTAssertFalse(MainWindowController.shouldAutoHideFilmstrip(isEnabled: false, pointerIsOverOverlay: false))
+    /// 浮动的信息栏点到别处就收起来，点在它自己身上或那颗开关上不收。
+    func testFloatingInspectorDismissesOnlyOnClicksElsewhere() {
+        XCTAssertTrue(MainWindowController.shouldDismissFloatingInspector(
+            hitViewIsInsideInspector: false,
+            hitViewIsTheInspectorToggle: false
+        ))
+        XCTAssertFalse(MainWindowController.shouldDismissFloatingInspector(
+            hitViewIsInsideInspector: true,
+            hitViewIsTheInspectorToggle: false
+        ))
+        // 开关自己要放过去，否则这里先关掉、开关再打开，按下去像没反应。
+        XCTAssertFalse(MainWindowController.shouldDismissFloatingInspector(
+            hitViewIsInsideInspector: false,
+            hitViewIsTheInspectorToggle: true
+        ))
     }
 
     func testPageControlsRequireMultipleImagesAndNoCropSession() {
@@ -1261,10 +1441,19 @@ final class MainWindowControllerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: fixture.folder) }
         let controller = fixture.controller
 
-        XCTAssertEqual(controller.titleBarControlsStackForTesting.arrangedSubviews.count, 2)
+        // 网格、胶卷开关、编辑、更多。
+        XCTAssertEqual(controller.titleBarControlsStackForTesting.arrangedSubviews.count, 4)
         XCTAssertEqual(
             controller.titleBarControlsStackForTesting.arrangedSubviews.first,
             controller.titleBarGridButtonForTesting
+        )
+        XCTAssertEqual(
+            controller.titleBarControlsStackForTesting.arrangedSubviews[1],
+            controller.titleBarFilmstripButtonForTesting
+        )
+        XCTAssertEqual(
+            controller.titleBarControlsStackForTesting.arrangedSubviews[2],
+            controller.titleBarEditButtonForTesting
         )
         XCTAssertNotNil(controller.titleBarGridButtonForTesting.image)
         XCTAssertFalse(controller.titleBarGridButtonForTesting.isEnabled)
@@ -1351,6 +1540,43 @@ final class MainWindowControllerTests: XCTestCase {
         ))
         controller.performTitleBarDoubleClickForTesting(hitView: controller.titleBarViewForTesting)
         XCTAssertNotEqual(window.isZoomed, initialZoomState)
+    }
+
+    /// 上一条测试是直接把视图递进判断函数的，绕开了坐标换算和真实命中。
+    /// 这条从事件出发走完整条路径：双击标题栏空白处必须被识别。
+    func testTitleBarDoubleClickOnBlankAreaIsRecognisedThroughRealHitTesting() throws {
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+        let window = try XCTUnwrap(controller.window)
+        window.contentView?.layoutSubtreeIfNeeded()
+        let titleBar = controller.titleBarViewForTesting
+        XCTAssertGreaterThan(titleBar.bounds.width, 200, "标题栏要先有宽度，否则取点没有意义")
+
+        // 那组按钮贴在左侧，标题文字居中，右侧这一块是空的。
+        let blankPoint = NSPoint(x: titleBar.bounds.maxX - 24, y: titleBar.bounds.midY)
+        let event = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: titleBar.convert(blankPoint, to: nil),
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 2,
+            pressure: 1
+        ))
+
+        XCTAssertTrue(controller.gestureRecognizer(
+            controller.titleBarDoubleClickRecognizerForTesting,
+            shouldAttemptToRecognizeWith: event
+        ))
+    }
+
+    /// 双击标题栏的行为跟随系统偏好，和其他应用一致。
+    func testTitleBarDoubleClickFollowsTheSystemPreference() {
+        XCTAssertEqual(MainWindowController.TitleBarDoubleClickAction.fromSystemPreference(nil), .zoom)
+        XCTAssertEqual(MainWindowController.TitleBarDoubleClickAction.fromSystemPreference("Maximize"), .zoom)
+        XCTAssertEqual(MainWindowController.TitleBarDoubleClickAction.fromSystemPreference("Minimize"), .minimize)
+        XCTAssertEqual(MainWindowController.TitleBarDoubleClickAction.fromSystemPreference("None"), .none)
     }
 
     func testDirectImageOpenDoesNotInventBackHistory() throws {
@@ -1460,7 +1686,7 @@ final class MainWindowControllerTests: XCTestCase {
         for _ in 0..<100 where !fixture.controller.canEditCurrentImageForTesting {
             try await Task.sleep(for: .milliseconds(10))
         }
-        fixture.controller.rotateClockwise(nil)
+        fixture.controller.performEditForTesting(.rotateClockwise)
         XCTAssertTrue(fixture.controller.hasUnsavedEditsForTesting)
         fixture.controller.goBackForTesting()
         fixture.controller.setUnsavedChangesChoiceForTesting(.cancel)
@@ -2160,7 +2386,7 @@ final class MainWindowControllerTests: XCTestCase {
             for _ in 0..<100 where !fixture.controller.canEditCurrentImageForTesting {
                 try await Task.sleep(for: .milliseconds(10))
             }
-            fixture.controller.rotateClockwise(nil)
+            fixture.controller.performEditForTesting(.rotateClockwise)
             fixture.controller.goBackForTesting()
             fixture.controller.selectFolderBrowserItemsForTesting([fixture.items[0].id])
             fixture.controller.setUnsavedChangesChoiceForTesting(choice)

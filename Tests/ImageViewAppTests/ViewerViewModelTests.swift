@@ -15,8 +15,11 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertEqual(first.cacheIdentityForTesting, second.cacheIdentityForTesting)
     }
 
-    func testContinuousReadingReturnsWholeDirectoryWithOnlyFiveDecodedNeighbors() async throws {
-        let urls = (0..<12).map { URL(fileURLWithPath: "/tmp/continuous-\($0).png") }
+    func testContinuousReadingReturnsWholeDirectoryWithABoundedDecodedWindow() async throws {
+        let radius = ContinuousReadingView.preloadRadius
+        let total = radius * 2 + 6
+        let focus = total / 2
+        let urls = (0..<total).map { URL(fileURLWithPath: "/tmp/continuous-\($0).png") }
         let items = urls.map { ImageItem(url: $0, format: .png) }
         let image = try makeDecodedImage(width: 4, height: 3)
         let viewModel = ViewerViewModel(
@@ -26,13 +29,13 @@ final class ViewerViewModelTests: XCTestCase {
         )
         await viewModel.open(url: urls[5])
 
-        let pages = await viewModel.continuousReadingPages(centeredAt: items[8].id)
+        let pages = await viewModel.continuousReadingPages(centeredAt: items[focus].id)
 
         XCTAssertEqual(pages.map(\.item.url), urls)
-        XCTAssertEqual(pages.compactMap(\.image).count, 5)
+        XCTAssertEqual(pages.compactMap(\.image).count, radius * 2 + 1)
         XCTAssertEqual(
             pages.enumerated().compactMap { $0.element.image == nil ? nil : $0.offset },
-            [6, 7, 8, 9, 10]
+            Array((focus - radius)...(focus + radius))
         )
     }
 

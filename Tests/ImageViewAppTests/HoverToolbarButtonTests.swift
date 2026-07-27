@@ -47,7 +47,7 @@ final class HoverToolbarButtonTests: XCTestCase {
         XCTAssertTrue(button.testingShowsHover)
         XCTAssertEqual(
             try XCTUnwrap(button.layer?.backgroundColor?.alpha),
-            CGFloat(0.12),
+            GlassMetrics.hoverTintAlpha,
             accuracy: 0.001
         )
         XCTAssertEqual(button.frame.size, size)
@@ -60,9 +60,10 @@ final class HoverToolbarButtonTests: XCTestCase {
         XCTAssertTrue(button.testingShowsPressed)
         XCTAssertEqual(
             try XCTUnwrap(button.layer?.backgroundColor?.alpha),
-            CGFloat(0.20),
+            GlassMetrics.pressedTintAlpha,
             accuracy: 0.001
         )
+        XCTAssertGreaterThan(GlassMetrics.pressedTintAlpha, GlassMetrics.hoverTintAlpha)
         XCTAssertEqual(button.frame.size, size)
     }
 

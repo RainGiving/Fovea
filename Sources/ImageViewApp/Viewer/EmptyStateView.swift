@@ -43,13 +43,15 @@ final class EmptyStateView: NSView {
         messageLabel.lineBreakMode = .byWordWrapping
 
         openButton.title = text("emptyState.open")
-        openButton.bezelStyle = .rounded
+        // 空状态直接坐在画布上，按钮用真玻璃；打开是首选动作，走主色。
+        openButton.bezelStyle = .glass
+        openButton.tintProminence = .primary
         openButton.target = self
         openButton.action = #selector(requestOpen(_:))
         openButton.setAccessibilityLabel(openButton.title)
 
         browseFolderButton.title = text("emptyState.browseFolder")
-        browseFolderButton.bezelStyle = .rounded
+        browseFolderButton.bezelStyle = .glass
         browseFolderButton.target = self
         browseFolderButton.action = #selector(requestBrowseFolder(_:))
         browseFolderButton.setAccessibilityLabel(browseFolderButton.title)

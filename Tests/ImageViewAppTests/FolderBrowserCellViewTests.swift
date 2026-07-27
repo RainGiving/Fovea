@@ -26,7 +26,7 @@ final class FolderBrowserCellViewTests: XCTestCase {
             url: URL(fileURLWithPath: "/tmp/a-very-long-image-filename-that-must-remain-visible.png"),
             format: .png
         )
-        let provider = ThumbnailProvider(loader: { _, _, completion in
+        let provider = ThumbnailProvider(loader: { _, _, _, completion in
             completion(.success(NSImage(size: NSSize(width: 8, height: 8))))
             return {}
         })

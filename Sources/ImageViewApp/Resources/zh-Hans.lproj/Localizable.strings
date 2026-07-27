@@ -1,11 +1,10 @@
 "menu.file" = "文件";
-"menu.edit" = "编辑";
 "menu.edit.undo" = "撤销编辑";
 "menu.edit.redo" = "重做编辑";
 "menu.edit.undoNamed" = "撤销%@";
 "menu.edit.redoNamed" = "重做%@";
-"contextMenu.copyImage" = "复制图片";
-"contextMenu.copyFile" = "拷贝文件";
+"contextMenu.copyImage" = "复制图像内容";
+"contextMenu.copyFile" = "复制文件";
 "contextMenu.openWith" = "打开方式";
 "editing.operation.rotateClockwise" = "顺时针旋转";
 "editing.operation.rotateCounterClockwise" = "逆时针旋转";
@@ -45,7 +44,7 @@
 "viewer.zoom.custom.apply" = "应用";
 "viewer.zoom.custom.cancel" = "取消";
 "menu.view.showFilmstrip" = "显示胶片预览";
-"menu.view.continuousReading" = "连续阅读";
+"menu.view.continuousReading" = "连续浏览";
 "menu.view.showInfo" = "显示信息";
 "menu.view.appearance" = "外观";
 "menu.view.appearance.system" = "跟随系统";
@@ -158,8 +157,8 @@
 "settings.general.showsInspector" = "显示信息面板";
 "settings.general.confirmsDelete" = "移到废纸篓前确认";
 "settings.general.navigationTransitions" = "使用图像切换动画";
-"settings.general.continuousReading" = "连续纵向阅读";
-"viewer.continuousReading.accessibilityLabel" = "连续图片阅读区域";
+"settings.general.continuousReading" = "连续纵向浏览";
+"viewer.continuousReading.accessibilityLabel" = "连续图片浏览区域";
 "viewer.announcement.loaded" = "%@ 已加载";
 "viewer.rename.title" = "重命名";
 "viewer.rename.message" = "输入新的文件名（不含扩展名）。";
@@ -224,6 +223,7 @@
 "inspector.bitDepth" = "位深";
 "inspector.orientation" = "方向";
 "inspector.copy" = "复制";
+"inspector.copied" = "已复制";
 "inspector.reveal" = "在访达中显示";
 "inspector.dock" = "停靠侧栏";
 "inspector.undock" = "显示为浮层";
@@ -259,3 +259,12 @@
 "editing.history.limitReached" = "最多保留 20 步编辑；请先保存或放弃编辑。";
 "editing.history.rebuildFailed" = "无法还原编辑历史";
 "batchRename.defaultBaseName" = "图片";
+
+"menu.image.edit" = "编辑图片";
+"crop.aspectRatio" = "裁切比例";
+"editDestination.title" = "编辑已应用";
+"editDestination.message" = "要覆盖原图，还是另存为一个新文件？";
+"editDestination.button.overwrite" = "覆盖原图";
+"editDestination.button.saveAs" = "另存为…";
+"editDestination.button.later" = "稍后决定";
+"filmstrip.slider.accessibilityLabel" = "拖动浏览缩略图";

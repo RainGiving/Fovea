@@ -21,7 +21,8 @@ final class ErrorStateView: NSView {
         messageLabel.lineBreakMode = .byWordWrapping
 
         retryButton.title = AppStrings.text("errorState.retry", preferredLanguages: preferredLanguages)
-        retryButton.bezelStyle = .rounded
+        retryButton.bezelStyle = .glass
+        retryButton.tintProminence = .primary
         retryButton.target = self
         retryButton.action = #selector(requestRetry(_:))
         retryButton.setAccessibilityLabel(retryButton.title)

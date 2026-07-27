@@ -111,12 +111,14 @@ final class FolderBrowserCellView: NSCollectionViewItem {
         thumbnailView.image = nil
     }
 
+    /// 网格里每格都套一层玻璃太重，选中态用一层染色加描边，
+    /// 圆角与浮层保持同一套度量。
     private func updateSelectionAppearance() {
         view.wantsLayer = true
-        view.layer?.cornerRadius = 10
+        view.layer?.cornerRadius = GlassMetrics.controlCornerRadius
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
             view.layer?.backgroundColor = isSelected
-                ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.16).cgColor
+                ? NSColor.selectedContentBackgroundColor.withAlphaComponent(GlassMetrics.hoverTintAlpha).cgColor
                 : NSColor.clear.cgColor
             view.layer?.borderColor = NSColor.keyboardFocusIndicatorColor.withAlphaComponent(0.65).cgColor
         }

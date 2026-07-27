@@ -193,7 +193,7 @@ final class FolderBrowserViewTests: XCTestCase {
     func testSelectionOnlyUpdateDoesNotRestartThumbnailRequests() {
         let item = ImageItem(url: URL(fileURLWithPath: "/tmp/one.png"), format: .png)
         let loadCount = FolderBrowserLockedValue(0)
-        let provider = ThumbnailProvider(loader: { _, _, completion in
+        let provider = ThumbnailProvider(loader: { _, _, _, completion in
             loadCount.withValue { $0 += 1 }
             completion(.success(NSImage(size: NSSize(width: 8, height: 8))))
             return {}
@@ -445,7 +445,7 @@ private final class FolderBrowserLockedValue<Value>: @unchecked Sendable {
 
 private extension ThumbnailProvider {
     static var stub: ThumbnailProvider {
-        ThumbnailProvider(loader: { _, _, completion in
+        ThumbnailProvider(loader: { _, _, _, completion in
             completion(.success(NSImage(size: NSSize(width: 8, height: 8))))
             return {}
         })

@@ -8,6 +8,13 @@ struct InspectorView: View {
     var onToggleDock: () -> Void = {}
     var onClose: () -> Void = {}
 
+    /// 始终是一块独立的玻璃，圆角不随停靠变化。
+    ///
+    /// 以前停靠时改成直角贴着窗口边，面板的直角和窗口自己的圆角对不齐，
+    /// 边上会露出底下那条直边。现在停靠只表示常驻并让图片让出这一条，
+    /// 面板本身还是浮着的。
+    var cornerRadius: CGFloat { GlassMetrics.panelCornerRadius }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -15,8 +22,10 @@ struct InspectorView: View {
                     Text(AppStrings.text("inspector.title"))
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
+                    // 图钉容易被理解成「置顶」，这里用侧栏和窗口图标
+                    // 直接表达停靠与浮动两种摆法。
                     Button(action: onToggleDock) {
-                        Image(systemName: isDocked ? "pin.slash" : "pin")
+                        Image(systemName: isDocked ? "macwindow" : "sidebar.right")
                     }
                     .buttonStyle(.plain)
                     .help(AppStrings.text(isDocked ? "inspector.undock" : "inspector.dock"))
@@ -61,6 +70,7 @@ struct InspectorView: View {
                     Button(AppStrings.text("inspector.reveal")) {
                         NSWorkspace.shared.activateFileViewerSelecting([metadata.url])
                     }
+                    .buttonStyle(.glass)
                     .controlSize(.small)
                 } else {
                     Text(AppStrings.text("inspector.noImage"))
@@ -70,24 +80,15 @@ struct InspectorView: View {
             }
             .padding(14)
         }
-        .frame(width: 220, alignment: .topLeading)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .frame(width: GlassMetrics.inspectorWidth, alignment: .topLeading)
+        .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
     }
 
     private func copyableRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             row(label, value)
             Spacer(minLength: 4)
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(value, forType: .string)
-            } label: {
-                Image(systemName: "doc.on.doc")
-            }
-            .buttonStyle(.plain)
-            .help(AppStrings.text("inspector.copy"))
-            .accessibilityLabel("\(AppStrings.text("inspector.copy")) \(label)")
+            CopyButton(label: label, value: value)
         }
     }
 
@@ -130,33 +131,52 @@ struct InspectorView: View {
     }
 }
 
+/// 一行信息右侧的复制按钮。
+///
+/// 原来按下去只有系统那点极轻的按压效果，复制成没复制成全靠猜。现在图标换成
+/// 对钩并着强调色，同时整颗按钮鼓一下，过一会儿再退回去。复制这种动作没有可见
+/// 结果，反馈就得由按钮自己给足。
+private struct CopyButton: View {
+    let label: String
+    let value: String
+
+    /// 对钩停留多久。短了看不清，长了会让人以为按钮卡住。
+    static let confirmationDuration: Duration = .milliseconds(1_200)
+
+    @State private var didCopy = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(value, forType: .string)
+            confirm()
+        } label: {
+            Image(systemName: didCopy ? "checkmark.circle.fill" : "doc.on.doc")
+                .foregroundStyle(didCopy ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                .scaleEffect(didCopy ? 1.18 : 1)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .help(AppStrings.text(didCopy ? "inspector.copied" : "inspector.copy"))
+        .accessibilityLabel("\(AppStrings.text("inspector.copy")) \(label)")
+        .accessibilityValue(didCopy ? AppStrings.text("inspector.copied") : "")
+    }
+
+    private func confirm() {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.55)) {
+            didCopy = true
+        }
+        Task {
+            try? await Task.sleep(for: Self.confirmationDuration)
+            withAnimation(.easeOut(duration: 0.2)) {
+                didCopy = false
+            }
+        }
+    }
+}
+
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
-private extension SupportedImageFormat {
-    var displayName: String {
-        switch self {
-        case .jpeg:
-            return "JPEG"
-        case .png:
-            return "PNG"
-        case .gif:
-            return "GIF"
-        case .tiff:
-            return "TIFF"
-        case .bmp:
-            return "BMP"
-        case .heic:
-            return "HEIC"
-        case .heif:
-            return "HEIF"
-        case .webp:
-            return "WebP"
-        case .avif:
-            return "AVIF"
-        case .svg:
-            return "SVG"
-        }
-    }
-}
+// 格式的显示名由 SupportedImageFormat.displayName 提供，这里不再重复一份。

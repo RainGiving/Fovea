@@ -88,6 +88,56 @@ final class ImageEditingServiceTests: XCTestCase {
         XCTAssertFalse(formats.contains(.svg))
     }
 
+    func testTIFFSaveIsCompressedInsteadOfRawBitmap() throws {
+        let side = 512
+        let image = try makeSolidImage(width: side, height: side)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("edited.tiff")
+
+        try ImageEditingService().save(image, to: url, format: .tiff)
+
+        let written = try XCTUnwrap(
+            try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int
+        )
+        // 未压缩时是 512 × 512 × 4 ≈ 1 MB。压过之后纯色图应该远小于这个数。
+        let rawBitmapBytes = side * side * 4
+        XCTAssertLessThan(written, rawBitmapBytes / 4)
+    }
+
+    func testTIFFCompressionSurvivesAlongsideExistingMetadata() {
+        let existingTIFF: [CFString: Any] = [kCGImagePropertyTIFFMake: "TestCam"]
+        let properties = ImageEditingService.applyingCompression(
+            to: [kCGImagePropertyTIFFDictionary: existingTIFF],
+            format: .tiff
+        )
+
+        let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
+        XCTAssertEqual(tiff?[kCGImagePropertyTIFFCompression] as? Int, ImageEditingService.tiffLZWCompression)
+        // 补压缩设置不能把原有的元数据挤掉。
+        XCTAssertEqual(tiff?[kCGImagePropertyTIFFMake] as? String, "TestCam")
+    }
+
+    func testLossyFormatsCarryACompressionQuality() {
+        for format in [SupportedImageFormat.jpeg, .heic, .heif] {
+            let properties = ImageEditingService.applyingCompression(to: nil, format: format)
+            XCTAssertEqual(
+                properties[kCGImageDestinationLossyCompressionQuality] as? CGFloat,
+                ImageEditingService.lossyCompressionQuality,
+                "\(format) 应当带上写出质量"
+            )
+        }
+    }
+
+    func testLosslessFormatsDoNotGetAQualitySetting() {
+        for format in [SupportedImageFormat.png, .bmp] {
+            let properties = ImageEditingService.applyingCompression(to: nil, format: format)
+            XCTAssertNil(properties[kCGImageDestinationLossyCompressionQuality])
+        }
+    }
+
     func testSaveDoesNotDeleteAnotherSaveOperationsTemporaryFile() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -185,6 +235,14 @@ final class ImageEditingServiceTests: XCTestCase {
         XCTAssertEqual(tiff[kCGImagePropertyTIFFMake] as? String, "ImageView Test")
         XCTAssertEqual(tiff[kCGImagePropertyTIFFModel] as? String, "Metadata Fixture")
         XCTAssertEqual(roundTripped.pixelSize, CGSize(width: 2, height: 4))
+    }
+
+    /// 纯色大图，压缩前后体积差别明显，适合验证写出确实压过。
+    private func makeSolidImage(width: Int, height: Int) throws -> CGImage {
+        try makeImage(rows: Array(
+            repeating: Array(repeating: Pixel.red, count: width),
+            count: height
+        ))
     }
 
     private func makeImage(rows: [[Pixel]]) throws -> CGImage {

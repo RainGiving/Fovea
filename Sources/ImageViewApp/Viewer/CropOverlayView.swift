@@ -1,4 +1,5 @@
 import AppKit
+import ImageViewCore
 
 enum CropHandle {
     case topLeft
@@ -24,6 +25,14 @@ final class CropOverlayView: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// 锁定的宽高比。改成非 Free 时立刻把当前选区收进这个比例。
+    var aspectRatio: CropAspectRatio = .free {
+        didSet {
+            guard aspectRatio != oldValue, isCropping else { return }
+            cropRect = fitted(aspectRatio.constrained(cropRect))
+        }
+    }
+
     private(set) var isCropping = false
 
     override var isFlipped: Bool { true }
@@ -37,9 +46,51 @@ final class CropOverlayView: NSView {
         }
 
         self.imageRect = imageRect
-        cropRect = imageRect.insetBy(dx: imageRect.width * 0.1, dy: imageRect.height * 0.1)
+        let initial = imageRect.insetBy(dx: imageRect.width * 0.1, dy: imageRect.height * 0.1)
+        cropRect = fitted(aspectRatio.constrained(initial))
         isCropping = true
         isHidden = false
+    }
+
+    /// 把选区推回画面之内。按比例收缩后中心可能落在边缘外，需要挪回来。
+    private func fitted(_ rect: CGRect) -> CGRect {
+        guard imageRect.width > 0, imageRect.height > 0 else { return rect }
+        var result = rect
+        result.size.width = min(result.width, imageRect.width)
+        result.size.height = min(result.height, imageRect.height)
+        result.origin.x = min(max(result.minX, imageRect.minX), imageRect.maxX - result.width)
+        result.origin.y = min(max(result.minY, imageRect.minY), imageRect.maxY - result.height)
+        return result
+    }
+
+    /// 锁定比例时，用户拖动的那条边决定主导方向，另一条边跟着算出来。
+    ///
+    /// 拖上下边就以高度为准算宽度，其余情况以宽度为准算高度。
+    /// 换算完再整体推回画面内，避免贴边时选区被拉扁。
+    private func applyingAspectRatio(_ rect: CGRect, edge: CropHandle) -> CGRect {
+        guard let ratio = aspectRatio.value, ratio > 0 else { return rect }
+        var result = rect
+        switch edge {
+        case .top, .bottom:
+            result.size.width = rect.height * ratio
+        default:
+            result.size.height = rect.width / ratio
+        }
+
+        // 保持用户正在拖的那个角或边不动，另一侧伸缩。
+        switch edge {
+        case .topLeft, .left, .bottomLeft:
+            result.origin.x = rect.maxX - result.width
+        default:
+            result.origin.x = rect.minX
+        }
+        switch edge {
+        case .topLeft, .top, .topRight:
+            result.origin.y = rect.maxY - result.height
+        default:
+            result.origin.y = rect.minY
+        }
+        return fitted(result)
     }
 
     func endCropping() {
@@ -92,7 +143,7 @@ final class CropOverlayView: NSView {
             moveCrop(by: delta)
             return
         }
-        cropRect = next
+        cropRect = applyingAspectRatio(next, edge: edge)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -149,8 +200,10 @@ final class CropOverlayView: NSView {
     }
 
     private func handle(at location: CGPoint) -> CropHandle? {
+        let rects = handleRects
         for handle in [CropHandle.topLeft, .top, .topRight, .right, .bottomRight, .bottom, .bottomLeft, .left] {
-            if handleRects[handle]!.insetBy(dx: -handleHitInset, dy: -handleHitInset).contains(location) {
+            guard let rect = rects[handle] else { continue }
+            if rect.insetBy(dx: -handleHitInset, dy: -handleHitInset).contains(location) {
                 return handle
             }
         }

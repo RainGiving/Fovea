@@ -65,9 +65,44 @@ final class PageNavigationOverlayViewTests: XCTestCase {
         XCTAssertNil(view.hitTest(NSPoint(x: view.bounds.midX, y: view.bounds.midY)))
     }
 
-    func testOverlayUsesAppearanceAdaptiveBorderAndBackground() {
-        XCTAssertEqual(PageNavigationOverlayView.backgroundColor, .windowBackgroundColor)
-        XCTAssertEqual(PageNavigationOverlayView.borderColor, .separatorColor)
-        XCTAssertEqual(PageNavigationOverlayView.borderWidth(forBackingScaleFactor: 2), 0.5)
+    /// 浮层在窗口里不是贴着原点放的，它上下都让开了玻璃 chrome。
+    /// 命中测试拿到的点在父视图坐标系里，漏掉换算时可点区域会整体错位。
+    func testHitTestingHonoursOverlayOriginInsideItsSuperview() {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 380))
+        let view = PageNavigationOverlayView(frame: NSRect(x: 0, y: 28, width: 500, height: 320))
+        container.addSubview(view)
+        view.layoutSubtreeIfNeeded()
+
+        let nextButton = view.debugNextButton
+        let topOfButton = NSPoint(x: nextButton.frame.midX, y: nextButton.frame.maxY - 2)
+        let containerPoint = container.convert(topOfButton, from: view)
+
+        XCTAssertIdentical(view.hitTest(containerPoint), nextButton)
+        XCTAssertNil(view.hitTest(container.convert(
+            NSPoint(x: nextButton.frame.midX, y: nextButton.frame.maxY + 12),
+            from: view
+        )))
+    }
+
+    func testButtonsUseGlassBezelInsteadOfHandDrawnLayers() {
+        let view = PageNavigationOverlayView()
+
+        for button in [view.debugPreviousButton, view.debugNextButton] {
+            XCTAssertEqual(button.bezelStyle, .glass)
+            XCTAssertTrue(button.isBordered)
+        }
+    }
+
+    func testHoverLiftsSymbolToAccentColorAndDisabledDropsIt() {
+        let view = PageNavigationOverlayView()
+        let button = view.debugNextButton
+
+        XCTAssertEqual(button.contentTintColor, .labelColor)
+
+        button.setHoveredForTesting(true)
+        XCTAssertEqual(button.contentTintColor, .controlAccentColor)
+
+        button.isEnabled = false
+        XCTAssertEqual(button.contentTintColor, .tertiaryLabelColor)
     }
 }

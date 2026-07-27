@@ -1,5 +1,4 @@
 "menu.file" = "File";
-"menu.edit" = "Edit";
 "menu.edit.undo" = "Undo Edit";
 "menu.edit.redo" = "Redo Edit";
 "menu.edit.undoNamed" = "Undo %@";
@@ -45,7 +44,7 @@
 "viewer.zoom.custom.apply" = "Apply";
 "viewer.zoom.custom.cancel" = "Cancel";
 "menu.view.showFilmstrip" = "Show Filmstrip";
-"menu.view.continuousReading" = "Continuous Reading";
+"menu.view.continuousReading" = "Continuous Browsing";
 "menu.view.showInfo" = "Show Info";
 "menu.view.appearance" = "Appearance";
 "menu.view.appearance.system" = "System";
@@ -158,8 +157,8 @@
 "settings.general.showsInspector" = "Show info panel";
 "settings.general.confirmsDelete" = "Confirm before moving to Trash";
 "settings.general.navigationTransitions" = "Animate image transitions";
-"settings.general.continuousReading" = "Continuous vertical reading";
-"viewer.continuousReading.accessibilityLabel" = "Continuous image reading area";
+"settings.general.continuousReading" = "Continuous vertical browsing";
+"viewer.continuousReading.accessibilityLabel" = "Continuous image browsing area";
 "viewer.announcement.loaded" = "%@ loaded";
 "viewer.rename.title" = "Rename";
 "viewer.rename.message" = "Enter a new filename without the extension.";
@@ -224,6 +223,7 @@
 "inspector.bitDepth" = "Bit Depth";
 "inspector.orientation" = "Orientation";
 "inspector.copy" = "Copy";
+"inspector.copied" = "Copied";
 "inspector.reveal" = "Show in Finder";
 "inspector.dock" = "Dock Sidebar";
 "inspector.undock" = "Show as Overlay";
@@ -259,3 +259,12 @@
 "editing.history.limitReached" = "Edit history is limited to 20 steps. Save or discard edits to continue.";
 "editing.history.rebuildFailed" = "Could not restore edit history";
 "batchRename.defaultBaseName" = "Image";
+
+"menu.image.edit" = "Edit Image";
+"crop.aspectRatio" = "Aspect Ratio";
+"editDestination.title" = "Edits Applied";
+"editDestination.message" = "Overwrite the original, or save as a new file?";
+"editDestination.button.overwrite" = "Overwrite";
+"editDestination.button.saveAs" = "Save As…";
+"editDestination.button.later" = "Decide Later";
+"filmstrip.slider.accessibilityLabel" = "Scrub thumbnails";

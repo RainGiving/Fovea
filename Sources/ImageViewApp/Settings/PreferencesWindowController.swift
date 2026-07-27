@@ -104,7 +104,7 @@ final class PreferencesWindowController: NSWindowController {
         separator.boxType = .separator
 
         selectCommonButton.title = text("settings.fileAssociations.selectCommon")
-        selectCommonButton.bezelStyle = .rounded
+        selectCommonButton.bezelStyle = .glass
         selectCommonButton.target = self
         selectCommonButton.action = #selector(selectCommonFormats(_:))
 
@@ -124,7 +124,8 @@ final class PreferencesWindowController: NSWindowController {
         rowsStack.spacing = 8
 
         applyButton.identifier = NSUserInterfaceItemIdentifier("fileAssociation.apply")
-        applyButton.bezelStyle = .rounded
+        applyButton.bezelStyle = .glass
+        applyButton.tintProminence = .primary
         applyButton.keyEquivalent = "\r"
         applyButton.target = self
         applyButton.action = #selector(applySelectedFormats(_:))
@@ -173,7 +174,7 @@ final class PreferencesWindowController: NSWindowController {
         continuousReadingButton.target = self
         continuousReadingButton.action = #selector(toggleContinuousReading(_:))
         resetUsageHintButton.title = text("settings.general.resetUsageHint")
-        resetUsageHintButton.bezelStyle = .rounded
+        resetUsageHintButton.bezelStyle = .glass
         resetUsageHintButton.target = self
         resetUsageHintButton.action = #selector(resetUsageHint(_:))
         resetUsageHintButton.setAccessibilityLabel(resetUsageHintButton.title)
@@ -290,19 +291,11 @@ final class PreferencesWindowController: NSWindowController {
         }
     }
 
+    /// 后缀列表直接取自格式表，加新格式时这里不用跟着改。
     private func extensionLabel(for format: SupportedImageFormat) -> String {
-        switch format {
-        case .jpeg: return "JPG, JPEG"
-        case .png: return "PNG"
-        case .gif: return "GIF"
-        case .webp: return "WEBP"
-        case .heic: return "HEIC"
-        case .tiff: return "TIF, TIFF"
-        case .bmp: return "BMP"
-        case .heif: return "HEIF"
-        case .avif: return "AVIF"
-        case .svg: return "SVG"
-        }
+        format.descriptor.extensions
+            .map { $0.uppercased() }
+            .joined(separator: ", ")
     }
 
     private func configureGeneralButton(_ button: NSButton, key: String, identifier: String) {

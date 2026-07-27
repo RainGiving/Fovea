@@ -42,20 +42,12 @@ enum ImageContextMenuBuilder {
                 action: #selector(MainWindowController.rotateCounterClockwise(_:)),
                 symbolName: "rotate.left"
             ),
+            // 翻转会改像素，只放在编辑控制条上，这里不重复出现。
+            // 旋转留在菜单里，因为它在查看状态下只是换个角度看，不改文件。
             Command(
-                titleKey: "menu.image.flipHorizontal",
-                action: #selector(MainWindowController.mirrorHorizontal(_:)),
-                symbolName: "arrow.left.arrow.right"
-            ),
-            Command(
-                titleKey: "menu.image.flipVertical",
-                action: #selector(MainWindowController.mirrorVertical(_:)),
-                symbolName: "arrow.up.arrow.down"
-            ),
-            Command(
-                titleKey: "menu.image.crop",
-                action: #selector(MainWindowController.startCropping(_:)),
-                symbolName: "crop"
+                titleKey: "menu.image.edit",
+                action: #selector(MainWindowController.startEditingImage(_:)),
+                symbolName: "slider.horizontal.below.rectangle"
             )
         ],
         [
@@ -98,6 +90,16 @@ enum ImageContextMenuBuilder {
             )
         ],
         [
+            Command(
+                titleKey: "menu.view.showFilmstrip",
+                action: #selector(MainWindowController.toggleFilmstrip(_:)),
+                symbolName: "film"
+            ),
+            Command(
+                titleKey: "menu.view.continuousReading",
+                action: #selector(MainWindowController.toggleContinuousReading(_:)),
+                symbolName: "scroll"
+            ),
             Command(
                 titleKey: "menu.view.showInfo",
                 action: #selector(MainWindowController.toggleInspector(_:)),

@@ -6,7 +6,7 @@ import XCTest
 @MainActor
 final class ThumbnailProviderTests: XCTestCase {
     func testCancellationPreventsCompletion() {
-        let provider = ThumbnailProvider(loader: { _, _, completion in
+        let provider = ThumbnailProvider(loader: { _, _, _, completion in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 completion(.success(NSImage(size: NSSize(width: 12, height: 12))))
             }

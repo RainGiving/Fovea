@@ -7,7 +7,9 @@ struct ContinuousReadingPage {
 }
 
 final class ContinuousReadingView: NSView {
-    static let preloadRadius = 2
+    /// 上下各预解码多少页。页面按预览分辨率解码之后单页成本降了一个量级，
+    /// 窗口可以开得比原来大得多，滚动时不容易撞到还没解出来的页。
+    static let preloadRadius = 6
     static let maximumDecodedPageCount = preloadRadius * 2 + 1
     static let maximumDecodedByteCost = ImageCache.defaultFullImageCostLimit
 
@@ -192,7 +194,9 @@ private final class ContinuousReadingDocumentView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.black.setFill()
+        // 底色跟随系统外观。以前写死黑色，配上很淡的占位块之后
+        // 未解码的页面看起来就是一整片黑，像是坏了。
+        NSColor.windowBackgroundColor.setFill()
         dirtyRect.fill()
         let frames = pageFrames(for: bounds.width)
         var lowerBound = 0
@@ -211,8 +215,9 @@ private final class ContinuousReadingDocumentView: NSView {
             let page = pages[index]
             let frame = frames[index]
             guard let image = page.image else {
-                NSColor.windowBackgroundColor.withAlphaComponent(0.18).setFill()
-                frame.fill()
+                // 解码窗口之外的页面画成一块看得见的待载占位，
+                // 而不是一片和背景分不开的色块。
+                drawPlaceholder(in: frame)
                 index += 1
                 continue
             }
@@ -226,6 +231,31 @@ private final class ContinuousReadingDocumentView: NSView {
             )
             index += 1
         }
+    }
+
+    /// 待载页面的占位：一块圆角浅色底加一个图片轮廓，
+    /// 让人一眼看出这里是还没解出来的图，不是空白或故障。
+    private func drawPlaceholder(in frame: CGRect) {
+        let path = NSBezierPath(roundedRect: frame, xRadius: 12, yRadius: 12)
+        NSColor.quaternaryLabelColor.withAlphaComponent(0.16).setFill()
+        path.fill()
+        NSColor.separatorColor.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+
+        let side = min(frame.width, frame.height) * 0.16
+        guard side > 8,
+              let symbol = NSImage(systemSymbolName: "photo", accessibilityDescription: nil)?
+                  .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: side, weight: .light)) else {
+            return
+        }
+        let box = NSRect(
+            x: frame.midX - symbol.size.width / 2,
+            y: frame.midY - symbol.size.height / 2,
+            width: symbol.size.width,
+            height: symbol.size.height
+        )
+        symbol.draw(in: box, from: .zero, operation: .sourceOver, fraction: 0.28, respectFlipped: true, hints: nil)
     }
 
     private func pageFrames(for width: CGFloat) -> [CGRect] {

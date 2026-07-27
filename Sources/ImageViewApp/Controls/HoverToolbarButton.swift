@@ -8,6 +8,14 @@ final class HoverToolbarButton: NSButton {
         clickCount == 1
     }
 
+    /// 开关型按钮打开时用强调色着色，和菜单里的勾选状态对应。
+    var isOnState = false {
+        didSet {
+            guard isOnState != oldValue else { return }
+            updateAppearance()
+        }
+    }
+
     private var isHovered = false
     private var isPressed = false
     private var focusedForTesting: Bool?
@@ -71,7 +79,27 @@ final class HoverToolbarButton: NSButton {
         super.highlight(flag)
         isPressed = flag && isEnabled
         updateAppearance()
+        animatePressFeedback(pressed: isPressed)
     }
+
+    /// 按下时轻微缩一下再弹回，给点击一个可感知的回应。
+    ///
+    /// 系统的玻璃 bezel 自带这个反馈，无边框按钮没有，所以手工补上。
+    private func animatePressFeedback(pressed: Bool) {
+        guard let layer, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        layer.frame = bounds
+        let animation = CABasicAnimation(keyPath: "transform.scale")
+        animation.fromValue = layer.presentation()?.value(forKeyPath: "transform.scale") ?? 1
+        animation.toValue = pressed ? Self.pressedScale : 1
+        animation.duration = pressed ? 0.08 : 0.14
+        animation.timingFunction = CAMediaTimingFunction(name: pressed ? .easeOut : .easeOut)
+        animation.fillMode = .forwards
+        animation.isRemovedOnCompletion = false
+        layer.add(animation, forKey: "press")
+    }
+
+    static let pressedScale: CGFloat = 0.88
 
     override func becomeFirstResponder() -> Bool {
         let becameFirstResponder = super.becomeFirstResponder()
@@ -125,21 +153,27 @@ final class HoverToolbarButton: NSButton {
         imagePosition = .imageOnly
         focusRingType = .default
         wantsLayer = true
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = GlassMetrics.controlCornerRadius
         updateAppearance()
     }
 
+    /// 按钮坐在玻璃标题栏里，再叠一层玻璃会互相打架，
+    /// 所以状态只用一层很淡的强调色，和系统工具栏按钮的行为一致。
     private func updateAppearance() {
         let backgroundColor: NSColor?
         if testingShowsPressed {
-            backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.20)
+            backgroundColor = NSColor.controlAccentColor.withAlphaComponent(GlassMetrics.pressedTintAlpha)
         } else if testingShowsHover {
-            backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12)
+            backgroundColor = NSColor.controlAccentColor.withAlphaComponent(GlassMetrics.hoverTintAlpha)
         } else {
             backgroundColor = nil
         }
         layer?.backgroundColor = backgroundColor?.cgColor
-        contentTintColor = isEnabled ? .labelColor : .secondaryLabelColor
+        if !isEnabled {
+            contentTintColor = .secondaryLabelColor
+        } else {
+            contentTintColor = isOnState ? .controlAccentColor : .labelColor
+        }
         needsDisplay = true
     }
 }

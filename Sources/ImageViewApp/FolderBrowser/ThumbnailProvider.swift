@@ -2,9 +2,26 @@ import AppKit
 import Foundation
 import ImageViewCore
 
+/// 缩略图请求的紧迫程度。
+///
+/// 胶卷条一次会排进几十张，队列按先进先出跑。当前这张排在中间就要等前面
+/// 二十来张解完才轮到，而它正好是画面正中被放大的那一格，缺图最显眼。
+/// 抬高它的队列优先级，让它插到队首。
+enum ThumbnailPriority: Sendable {
+    case normal
+    case high
+
+    var queuePriority: Operation.QueuePriority {
+        switch self {
+        case .normal: .normal
+        case .high: .veryHigh
+        }
+    }
+}
+
 final class ThumbnailProvider {
     typealias Completion = @Sendable (Result<NSImage, Error>) -> Void
-    typealias Loader = @Sendable (ImageItem, CGFloat, @escaping Completion) -> @Sendable () -> Void
+    typealias Loader = @Sendable (ImageItem, CGFloat, ThumbnailPriority, @escaping Completion) -> @Sendable () -> Void
     typealias Decoder = @Sendable (ImageItem, CGFloat) throws -> DecodedImage
 
     static let defaultMaxPixelSize: CGFloat = 320
@@ -14,7 +31,9 @@ final class ThumbnailProvider {
     private static let decodeQueue: OperationQueue = {
         let queue = OperationQueue()
         queue.name = "ImageView.thumbnail-decode"
-        queue.qualityOfService = .utility
+        // 缩略图是用户正盯着的界面，跑在 utility 上会被系统压到后台节奏，
+        // 机器一忙就迟迟出不来。
+        queue.qualityOfService = .userInitiated
         queue.maxConcurrentOperationCount = maximumConcurrentDecodeCount
         return queue
     }()
@@ -36,10 +55,11 @@ final class ThumbnailProvider {
                 maxPixelSize: maxPixelSize
             )
         }
-        self.loader = loader ?? { item, maxPixelSize, completion in
+        self.loader = loader ?? { item, maxPixelSize, priority, completion in
             Self.loadDefaultThumbnail(
                 item: item,
                 maxPixelSize: maxPixelSize,
+                priority: priority,
                 currentFileVersionAtURL: currentFileVersionAtURL,
                 decoder: resolvedDecoder,
                 completion: completion
@@ -48,9 +68,13 @@ final class ThumbnailProvider {
     }
 
     @discardableResult
-    func loadThumbnail(for item: ImageItem, completion: @escaping Completion) -> ThumbnailRequest {
+    func loadThumbnail(
+        for item: ImageItem,
+        priority: ThumbnailPriority = .normal,
+        completion: @escaping Completion
+    ) -> ThumbnailRequest {
         let request = ThumbnailRequest()
-        let cancelLoader = loader(item, maxPixelSize) { result in
+        let cancelLoader = loader(item, maxPixelSize, priority) { result in
             guard request.completeIfActive() else { return }
             completion(result)
         }
@@ -61,6 +85,7 @@ final class ThumbnailProvider {
     private static func loadDefaultThumbnail(
         item: ImageItem,
         maxPixelSize: CGFloat,
+        priority: ThumbnailPriority,
         currentFileVersionAtURL: @escaping @Sendable (URL) -> CurrentFileVersion?,
         decoder: @escaping Decoder,
         completion: @escaping Completion
@@ -77,29 +102,35 @@ final class ThumbnailProvider {
         let operation = BlockOperation()
         operation.addExecutionBlock { [weak operation] in
             guard operation?.isCancelled == false else { return }
+
+            // 投递结果时不能再看 operation 是否还活着。
+            // 操作一执行完队列就可能把它释放掉，等 main 队列的块跑起来时
+            // 弱引用已经是 nil，而 `nil == false` 为假，completion 会被
+            // 直接丢弃，那一格缩略图就永远空白。取消与否交给
+            // ThumbnailRequest.completeIfActive 判断，那一层本来就管这件事。
+            func deliver(_ result: Result<NSImage, Error>) {
+                DispatchQueue.main.async { completion(result) }
+            }
+
             do {
                 let decoded = try decoder(item, maxPixelSize)
-                guard operation?.isCancelled == false else { return }
                 guard currentFileVersionAtURL(item.url) == version else {
-                    DispatchQueue.main.async { [weak operation] in
-                        guard operation?.isCancelled == false else { return }
-                        completion(.failure(ImageDecodeError.cannotDecodeImage))
-                    }
+                    guard operation?.isCancelled == false else { return }
+                    deliver(.failure(ImageDecodeError.cannotDecodeImage))
                     return
                 }
                 let image = NSImage(cgImage: decoded.cgImage, size: decoded.pixelSize)
+                // 解码这一步已经做完了，取消只拦投递，不该把成果一起扔掉。
+                // 胶卷条重建时同一张图会立刻被再请求一次，缓存里有就是瞬时命中，
+                // 否则每次重建都要从头再解一遍。
                 cache.setObject(image, forKey: key, cost: decoded.decodedByteCost)
-                DispatchQueue.main.async { [weak operation] in
-                    guard operation?.isCancelled == false else { return }
-                    completion(.success(image))
-                }
+                guard operation?.isCancelled == false else { return }
+                deliver(.success(image))
             } catch {
-                DispatchQueue.main.async { [weak operation] in
-                    guard operation?.isCancelled == false else { return }
-                    completion(.failure(error))
-                }
+                deliver(.failure(error))
             }
         }
+        operation.queuePriority = priority.queuePriority
         decodeQueue.addOperation(operation)
 
         let cancellation = OperationCancellation(operation: operation)

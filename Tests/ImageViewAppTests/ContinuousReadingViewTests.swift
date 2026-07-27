@@ -5,9 +5,12 @@ import XCTest
 
 @MainActor
 final class ContinuousReadingViewTests: XCTestCase {
-    func testContinuousReadingKeepsAtMostCurrentPlusTwoNeighborsPerSide() {
+    func testContinuousReadingKeepsABoundedDecodedWindow() {
         let view = ContinuousReadingView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
-        let items = (0..<12).map { index in
+        let radius = ContinuousReadingView.preloadRadius
+        let total = radius * 2 + 4
+        let focus = total / 2
+        let items = (0..<total).map { index in
             ImageItem(
                 url: URL(fileURLWithPath: "/tmp/\(index).png"),
                 format: .png
@@ -16,16 +19,16 @@ final class ContinuousReadingViewTests: XCTestCase {
         let pages = items.enumerated().map { index, item in
             ContinuousReadingPage(
                 item: item,
-                image: (3...7).contains(index) ? makeDecodedImage(width: 400, height: 600) : nil
+                image: abs(index - focus) <= radius ? makeDecodedImage(width: 400, height: 600) : nil
             )
         }
 
-        view.apply(pages: pages, currentItemID: items[5].id)
+        view.apply(pages: pages, currentItemID: items[focus].id)
 
-        XCTAssertEqual(ContinuousReadingView.preloadRadius, 2)
-        XCTAssertEqual(ContinuousReadingView.maximumDecodedPageCount, 5)
-        XCTAssertEqual(view.testingPageCount, 12, "the full directory remains vertically reachable")
-        XCTAssertEqual(view.testingDecodedPageCount, 5)
+        // 窗口大小由 preloadRadius 决定，这里只钉住「有界且完整目录可达」这条性质。
+        XCTAssertEqual(ContinuousReadingView.maximumDecodedPageCount, radius * 2 + 1)
+        XCTAssertEqual(view.testingPageCount, total, "the full directory remains vertically reachable")
+        XCTAssertEqual(view.testingDecodedPageCount, radius * 2 + 1)
         XCTAssertEqual(view.testingPageURLs, items.map(\.url))
     }
 
