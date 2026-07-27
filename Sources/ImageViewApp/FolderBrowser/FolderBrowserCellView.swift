@@ -83,6 +83,7 @@ final class FolderBrowserCellView: NSCollectionViewItem {
         accessibilityTotal = total
         filenameField.stringValue = item.url.deletingPathExtension().lastPathComponent
         thumbnailView.image = nil
+        thumbnailView.alphaValue = 1
         updateAccessibility()
 
         thumbnailRequest = thumbnailProvider.loadThumbnail(for: item) { [weak self, itemID = item.id] result in
@@ -94,7 +95,7 @@ final class FolderBrowserCellView: NSCollectionViewItem {
                 }
 
                 if case let .success(image) = result {
-                    self.thumbnailView.image = image
+                    self.showThumbnail(image)
                 }
             }
         }
@@ -109,6 +110,19 @@ final class FolderBrowserCellView: NSCollectionViewItem {
         accessibilityTotal = nil
         filenameField.stringValue = ""
         thumbnailView.image = nil
+        thumbnailView.alphaValue = 1
+    }
+
+    /// 缩略图解出来之后淡进来。
+    ///
+    /// 一屏几十格各自在不同时刻落位，硬切会让整片网格闪个不停。
+    private func showThumbnail(_ image: NSImage) {
+        thumbnailView.image = image
+        guard Motion.canAnimate(thumbnailView) else { return }
+        thumbnailView.alphaValue = 0
+        Motion.run(in: thumbnailView, duration: Motion.standard) {
+            thumbnailView.animator().alphaValue = 1
+        }
     }
 
     /// 网格里每格都套一层玻璃太重，选中态用一层染色加描边，
@@ -116,15 +130,40 @@ final class FolderBrowserCellView: NSCollectionViewItem {
     private func updateSelectionAppearance() {
         view.wantsLayer = true
         view.layer?.cornerRadius = GlassMetrics.controlCornerRadius
+        var background = NSColor.clear.cgColor
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
-            view.layer?.backgroundColor = isSelected
+            background = isSelected
                 ? NSColor.selectedContentBackgroundColor.withAlphaComponent(GlassMetrics.hoverTintAlpha).cgColor
                 : NSColor.clear.cgColor
             view.layer?.borderColor = NSColor.keyboardFocusIndicatorColor.withAlphaComponent(0.65).cgColor
         }
-        view.layer?.borderWidth = isSelected ? 1 : 0
+        applySelectionLayer(background: background, borderWidth: isSelected ? 1 : 0)
         filenameField.font = .systemFont(ofSize: 12, weight: isSelected ? .semibold : .regular)
         updateAccessibility()
+    }
+
+    /// 选中的那层底色和描边淡着变。
+    ///
+    /// 框选一片图时格子接连点亮，硬切看着像在闪。模型值当场写好，
+    /// 读到的一直是最终状态，动画只负责这一段怎么走过去。
+    private func applySelectionLayer(background: CGColor, borderWidth: CGFloat) {
+        guard let layer = view.layer else { return }
+        if Motion.canAnimate(view), layer.backgroundColor != background || layer.borderWidth != borderWidth {
+            let fade = CABasicAnimation(keyPath: "backgroundColor")
+            fade.fromValue = layer.presentation()?.backgroundColor ?? layer.backgroundColor
+            fade.toValue = background
+            let border = CABasicAnimation(keyPath: "borderWidth")
+            border.fromValue = layer.presentation()?.borderWidth ?? layer.borderWidth
+            border.toValue = borderWidth
+            for animation in [fade, border] {
+                animation.duration = Motion.quick
+                animation.timingFunction = Motion.entrance
+            }
+            layer.add(fade, forKey: "motion.selectionFill")
+            layer.add(border, forKey: "motion.selectionBorder")
+        }
+        layer.backgroundColor = background
+        layer.borderWidth = borderWidth
     }
 
     private func updateAccessibility() {

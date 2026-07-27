@@ -13,6 +13,9 @@ final class HoverToolbarButton: NSButton {
         didSet {
             guard isOnState != oldValue else { return }
             updateAppearance()
+            // 开关翻面时图标鼓一下。着色的变化很轻，单靠颜色不容易察觉到
+            // 这一下按下去到底有没有生效。
+            Motion.pop(self, scale: 1.18, duration: 0.28)
         }
     }
 
@@ -85,18 +88,15 @@ final class HoverToolbarButton: NSButton {
     /// 按下时轻微缩一下再弹回，给点击一个可感知的回应。
     ///
     /// 系统的玻璃 bezel 自带这个反馈，无边框按钮没有，所以手工补上。
+    /// 缩放绕视图中心做。AppKit 每次改 frame 都会把图层的 anchorPoint 按回
+    /// 原点，改 anchorPoint 撑不过下一次布局，中心点只能写进变换里。
     private func animatePressFeedback(pressed: Bool) {
-        guard let layer, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
-        layer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        layer.frame = bounds
-        let animation = CABasicAnimation(keyPath: "transform.scale")
-        animation.fromValue = layer.presentation()?.value(forKeyPath: "transform.scale") ?? 1
-        animation.toValue = pressed ? Self.pressedScale : 1
-        animation.duration = pressed ? 0.08 : 0.14
-        animation.timingFunction = CAMediaTimingFunction(name: pressed ? .easeOut : .easeOut)
-        animation.fillMode = .forwards
-        animation.isRemovedOnCompletion = false
-        layer.add(animation, forKey: "press")
+        Motion.setScale(
+            self,
+            pressed ? Self.pressedScale : 1,
+            duration: pressed ? 0.09 : 0.16,
+            timing: pressed ? Motion.entrance : Motion.springy
+        )
     }
 
     static let pressedScale: CGFloat = 0.88
@@ -168,12 +168,28 @@ final class HoverToolbarButton: NSButton {
         } else {
             backgroundColor = nil
         }
-        layer?.backgroundColor = backgroundColor?.cgColor
+        applyBackgroundTint(backgroundColor?.cgColor)
         if !isEnabled {
             contentTintColor = .secondaryLabelColor
         } else {
             contentTintColor = isOnState ? .controlAccentColor : .labelColor
         }
         needsDisplay = true
+    }
+
+    /// 悬停的那层淡色渐变过去，指针扫过一排按钮时不会闪成一串硬块。
+    ///
+    /// 模型值当场写好，读到的始终是目标色，动画只负责这段过渡怎么走。
+    private func applyBackgroundTint(_ color: CGColor?) {
+        guard let layer else { return }
+        if Motion.canAnimate(self), layer.backgroundColor != color {
+            let animation = CABasicAnimation(keyPath: "backgroundColor")
+            animation.fromValue = layer.presentation()?.backgroundColor ?? layer.backgroundColor
+            animation.toValue = color
+            animation.duration = Motion.quick
+            animation.timingFunction = Motion.entrance
+            layer.add(animation, forKey: "motion.tint")
+        }
+        layer.backgroundColor = color
     }
 }

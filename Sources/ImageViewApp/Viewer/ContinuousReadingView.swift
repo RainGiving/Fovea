@@ -116,7 +116,9 @@ final class ContinuousReadingView: NSView {
         layoutSubtreeIfNeeded()
         if shouldRevealCurrent, let currentItemID,
            let frame = document.frame(for: currentItemID) {
-            scroll(toDocumentY: frame.minY - 12)
+            // 已经在连续浏览里再换页时滚过去，看得出是从哪一页挪到哪一页。
+            // 刚进来的第一次不滚，否则一上来就是一段长距离的自动滚动。
+            scroll(toDocumentY: frame.minY - 12, animated: previousID != nil)
         } else if let currentItemID,
                   let previousOffsetFromPage,
                   let frame = document.frame(for: currentItemID) {
@@ -132,10 +134,21 @@ final class ContinuousReadingView: NSView {
         publishFocusedItemIfNeeded()
     }
 
-    private func scroll(toDocumentY y: CGFloat) {
+    private func scroll(toDocumentY y: CGFloat, animated: Bool = false) {
         let maximumY = max(0, document.bounds.height - scrollView.contentSize.height)
-        scrollView.contentView.scroll(to: CGPoint(x: 0, y: min(max(0, y), maximumY)))
-        scrollView.reflectScrolledClipView(scrollView.contentView)
+        let target = CGPoint(x: 0, y: min(max(0, y), maximumY))
+        guard animated, Motion.canAnimate(self) else {
+            scrollView.contentView.scroll(to: target)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            return
+        }
+
+        Motion.run(in: self, duration: Motion.expressive, timing: Motion.move) {
+            scrollView.contentView.animator().setBoundsOrigin(target)
+        } completion: { [weak self] in
+            guard let self else { return }
+            self.scrollView.reflectScrolledClipView(self.scrollView.contentView)
+        }
     }
 
     private func scheduleFocusUpdate() {

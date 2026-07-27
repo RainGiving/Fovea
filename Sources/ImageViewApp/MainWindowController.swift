@@ -32,7 +32,19 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     static let bottomBarStatusToInfoSpacing: CGFloat = 8
     static let filmstripOverlayHeight: CGFloat = 118
     static let overlayAutoHideDelay: TimeInterval = 1.8
-    static let overlayFadeOutDuration: TimeInterval = 0.18
+    /// 浮层出现和收起的时长。胶卷条和翻页按钮共用这一档，两边的节奏才对得上。
+    static let overlayRevealDuration: TimeInterval = Motion.standard
+    static let overlayFadeOutDuration: TimeInterval = Motion.standard * Motion.exitRatio
+    /// 几块浮层各自的定位常数，以及它们收起时该退到哪。
+    ///
+    /// 进出都是「淡入淡出加一小段位移」：胶卷条从下边栏那侧升起来，编辑控制条
+    /// 也从下面推上来，首次使用提示则从标题栏底下垂下来。
+    static let filmstripBottomSpacing: CGFloat = -14
+    static let filmstripHiddenBottomSpacing: CGFloat = -14 + 16
+    static let cropControlsBottomSpacing: CGFloat = -24
+    static let cropControlsHiddenBottomSpacing: CGFloat = -24 + 26
+    static let usageHintTopSpacing: CGFloat = 18
+    static let usageHintHiddenTopSpacing: CGFloat = 18 - 14
     static func titleBarBrowseFolderToolTip(preferredLanguages: [String] = Locale.preferredLanguages) -> String {
         AppStrings.text("titleBar.showFolder", preferredLanguages: preferredLanguages)
     }
@@ -173,7 +185,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         target: self,
         action: #selector(showZoomMenu(_:))
     )
-    private let bottomInfoButton = NSButton()
+    /// 底部那颗信息按钮和标题栏用同一种按钮，悬停、按下和点亮的反馈才一致。
+    private let bottomInfoButton = HoverToolbarButton()
     private let filmstripOverlayView = FilmstripOverlayView()
     private let filmstripView = FilmstripView()
     /// 胶卷条下方的滑杆，拖动可以快速扫过整个目录。
@@ -187,7 +200,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private var displayedItemURL: URL?
     private var associatedViewerURL: URL?
     private var externalFileCheckTimer: Timer?
-    private var filmstripVisibilityGeneration = 0
     private var pageControlsHideTimer: Timer?
     private var pageControlsVisibilityGeneration = 0
     private var usageHintTimer: Timer?
@@ -209,6 +221,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private var filmstripCenterXConstraint: NSLayoutConstraint!
     private var filmstripTrailingConstraint: NSLayoutConstraint!
     private var filmstripWidthConstraint: NSLayoutConstraint!
+    /// 这三条是浮层进出时用来位移的把手，各自都有一个「收起时」的常数。
+    private var filmstripBottomConstraint: NSLayoutConstraint!
+    private var cropControlsBottomConstraint: NSLayoutConstraint!
+    private var usageHintTopConstraint: NSLayoutConstraint!
     private var titleBarHeightConstraint: NSLayoutConstraint!
     private var bottomBarHeightConstraint: NSLayoutConstraint!
     private var isInspectorDocked = false
@@ -739,6 +755,19 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             multiplier: 0.72
         )
         filmstripWidthConstraint.priority = .defaultHigh
+        // 胶卷条压在下边栏上方，不遮住 1 / 1 这一行状态。
+        filmstripBottomConstraint = filmstripOverlayView.bottomAnchor.constraint(
+            equalTo: bottomBarView.topAnchor,
+            constant: Self.filmstripBottomSpacing
+        )
+        cropControlsBottomConstraint = cropControlsView.bottomAnchor.constraint(
+            equalTo: bottomBarView.topAnchor,
+            constant: Self.cropControlsBottomSpacing
+        )
+        usageHintTopConstraint = usageHintView.topAnchor.constraint(
+            equalTo: titleBarView.bottomAnchor,
+            constant: Self.usageHintTopSpacing
+        )
         titleBarHeightConstraint = titleBarView.heightAnchor.constraint(equalToConstant: Self.titleBarHeight)
         bottomBarHeightConstraint = bottomBarView.heightAnchor.constraint(equalToConstant: Self.bottomBarHeight)
         NSLayoutConstraint.activate([
@@ -784,7 +813,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             inspectorTopConstraint,
             inspectorBottomConstraint,
             usageHintView.centerXAnchor.constraint(equalTo: canvas.centerXAnchor),
-            usageHintView.topAnchor.constraint(equalTo: titleBarView.bottomAnchor, constant: 18),
+            usageHintTopConstraint,
             usageHintView.leadingAnchor.constraint(greaterThanOrEqualTo: canvas.leadingAnchor, constant: 20),
             usageHintView.trailingAnchor.constraint(lessThanOrEqualTo: canvas.trailingAnchor, constant: -20),
             bottomDimensionLabel.leadingAnchor.constraint(equalTo: bottomBarView.leadingAnchor, constant: 12),
@@ -797,11 +826,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             bottomZoomLabel.centerYAnchor.constraint(equalTo: bottomBarView.centerYAnchor),
             bottomInfoButton.trailingAnchor.constraint(equalTo: bottomBarView.trailingAnchor, constant: -8),
             bottomInfoButton.centerYAnchor.constraint(equalTo: bottomBarView.centerYAnchor),
-            bottomInfoButton.widthAnchor.constraint(equalToConstant: 22),
-            bottomInfoButton.heightAnchor.constraint(equalToConstant: 22),
             filmstripCenterXConstraint,
-            // 胶卷条压在下边栏上方，不遮住 1 / 1 这一行状态。
-            filmstripOverlayView.bottomAnchor.constraint(equalTo: bottomBarView.topAnchor, constant: -14),
+            filmstripBottomConstraint,
             filmstripWidthConstraint,
             filmstripOverlayView.heightAnchor.constraint(equalToConstant: Self.filmstripOverlayHeight),
             filmstripOverlayView.leadingAnchor.constraint(greaterThanOrEqualTo: canvas.leadingAnchor, constant: 16),
@@ -822,7 +848,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             cropOverlay.topAnchor.constraint(equalTo: canvas.topAnchor),
             cropOverlay.bottomAnchor.constraint(equalTo: canvas.bottomAnchor),
             cropControlsView.centerXAnchor.constraint(equalTo: canvas.centerXAnchor),
-            cropControlsView.bottomAnchor.constraint(equalTo: bottomBarView.topAnchor, constant: -24)
+            cropControlsBottomConstraint
         ])
     }
 
@@ -1133,20 +1159,22 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         navigateToNextImage()
     }
 
+    // 从菜单或快捷键选一档缩放是一步到位的改动，让画面滑过去。
+    // 捏合和拖动要跟手，那条路不走过渡。
     @objc func actualSize(_ sender: Any?) {
-        canvas.zoomToActualSize()
+        canvas.withAnimatedGeometry { canvas.zoomToActualSize() }
     }
 
     @objc func zoomToFit(_ sender: Any?) {
-        canvas.resetViewTransform()
+        canvas.withAnimatedGeometry { canvas.resetViewTransform() }
     }
 
     @objc func zoomToFitWidth(_ sender: Any?) {
-        canvas.zoomToFitWidth()
+        canvas.withAnimatedGeometry { canvas.zoomToFitWidth() }
     }
 
     @objc private func setZoomPercentage(_ sender: NSMenuItem) {
-        canvas.setManualPercentage(CGFloat(sender.tag))
+        canvas.withAnimatedGeometry { canvas.setManualPercentage(CGFloat(sender.tag)) }
     }
 
     @objc private func setCustomZoomPercentage(_ sender: NSMenuItem) {
@@ -1167,7 +1195,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
               percentage <= 1_200 else {
             return
         }
-        canvas.setManualPercentage(CGFloat(percentage))
+        canvas.withAnimatedGeometry { canvas.setManualPercentage(CGFloat(percentage)) }
     }
 
     @objc private func showZoomMenu(_ sender: Any?) {
@@ -1652,7 +1680,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             }
             return true
         case .toggleZoom:
-            canvas.toggleFitOrActualSize()
+            canvas.withAnimatedGeometry { canvas.toggleFitOrActualSize() }
             return true
         case .toggleFullscreen:
             window?.toggleFullScreen(nil)
@@ -1864,9 +1892,22 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             onCancel: { [weak self] in self?.cancelCrop(nil) },
             onApply: { [weak self] in self?.applyCrop(nil) }
         )
-        cropControlsView.isHidden = !cropOverlay.isCropping
+        // 遮罩淡进来，控制条从下面推上来，两件事同时发生，
+        // 「进入编辑」就是一个动作而不是两个控件各自出现。
+        Motion.setVisible(cropOverlay, cropOverlay.isCropping, duration: Motion.standard)
+        Motion.setVisible(
+            cropControlsView,
+            cropOverlay.isCropping,
+            slide: Motion.Slide(
+                cropControlsBottomConstraint,
+                visible: Self.cropControlsBottomSpacing,
+                hidden: Self.cropControlsHiddenBottomSpacing,
+                in: rootView
+            ),
+            duration: Motion.standard
+        )
         if cropOverlay.isCropping {
-            hidePageControls(immediately: true)
+            hidePageControls()
         }
         // 标题栏那颗编辑按钮是开关，进出编辑都要跟着亮灭。
         updateTitleBarControlAvailability()
@@ -2008,7 +2049,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         syncFilmstripContent(navigationState: viewModel.navigationState)
         updateFilmstripVisibility()
         updateInspectorPresentation(hasCurrentImage: viewModel.currentImage != nil)
-        bottomInfoButton.state = settings.showsInspector ? .on : .off
+        bottomInfoButton.isOnState = settings.showsInspector
+        bottomInfoButton.setAccessibilityValue(settings.showsInspector)
         updateDimensionStatus(metadata: viewModel.currentMetadata)
         updatePageStatus(navigationState: viewModel.navigationState)
         updateZoomStatus()
@@ -2049,8 +2091,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         let shouldShow = settings.usesContinuousReading
             && viewModel.currentImage != nil
             && !isFolderBrowserMode
-        continuousReadingView.isHidden = !shouldShow
-        canvas.isHidden = shouldShow || isFolderBrowserMode
+        // 单图和连续浏览铺在同一块地方，两者交叉淡入淡出，
+        // 一层退一层进，中间不会出现一帧空白。
+        Motion.setVisible(continuousReadingView, shouldShow, duration: Motion.standard)
+        setCanvasVisible(!(shouldShow || isFolderBrowserMode))
         if shouldShow {
             refreshContinuousReadingWindow()
         } else {
@@ -2074,6 +2118,11 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         }
     }
 
+    /// 画布的进出。连续浏览和文件夹网格都会把它换下去。
+    private func setCanvasVisible(_ visible: Bool) {
+        Motion.setVisible(canvas, visible, duration: Motion.standard)
+    }
+
     private func updateInspector(metadata: ImageMetadata?) {
         inspectorView.rootView = InspectorView(
             metadata: metadata,
@@ -2086,7 +2135,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private func toggleInspectorDock() {
         isInspectorDocked.toggle()
         updateInspector(metadata: viewModel.currentMetadata)
-        updateInspectorLayout()
+        // 停靠改变的是图片的可用区域，画面要跟着一起让，不能只有面板在动。
+        updateInspectorLayout(animated: true)
     }
 
     /// 停靠的信息栏要占掉的横向空间：面板宽度加上它两侧的间距。
@@ -2101,28 +2151,53 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
 
     /// 信息栏在不在、占不占地方，都取决于开关和当前有没有图。
     private func updateInspectorPresentation(hasCurrentImage: Bool) {
-        inspectorView.isHidden = !Self.shouldDisplayInspector(
+        setInspectorVisible(Self.shouldDisplayInspector(
             isEnabled: settings.showsInspector,
             hasCurrentImage: hasCurrentImage
-        )
-        updateInspectorLayout()
+        ) && !isFolderBrowserMode)
     }
 
-    private func updateInspectorLayout() {
+    /// 信息栏朝窗口右沿滑进滑出。
+    ///
+    /// 它占的那一条同时决定图片和几块浮层的位置，所以进出要和布局一起动，
+    /// 面板滑到一半图片就跳完位置的话，两件事看着不像同一个动作。
+    private func setInspectorVisible(_ visible: Bool) {
+        Motion.setVisible(
+            inspectorView,
+            visible,
+            slide: Motion.Slide(
+                inspectorTrailingConstraint,
+                visible: -GlassMetrics.floatingInset,
+                hidden: Motion.panelOffset,
+                in: rootView
+            ),
+            // 和它带动的那套布局同一档时长，面板和画面才像在做同一件事。
+            duration: Motion.expressive
+        )
+        updateInspectorLayout(animated: true)
+    }
+
+    private func updateInspectorLayout(animated: Bool = false) {
         // 信息栏永远是一块浮起的圆角玻璃，四周留同样的间距。停靠只表示它常驻，
         // 并且图片往左让出它占的这一条，不再贴到窗口边上。
-        inspectorTrailingConstraint?.constant = -GlassMetrics.floatingInset
         inspectorTopConstraint?.constant = GlassMetrics.floatingInset
         inspectorBottomConstraint?.constant = -GlassMetrics.floatingInset
-        // 画布始终铺满整窗，模糊底才连成一片，玻璃底下也才有东西可以折射。
-        // 图片靠 contentInsets 避开面板，和它避开上下边栏是同一套做法。
-        updateCanvasContentInsets(chromeVisible: isChromeVisible)
         // 浮在画布上的那几层不受 contentInsets 影响，各自避开那一条。
         let reserved = reservedInspectorWidth
-        filmstripCenterXConstraint?.constant = -reserved / 2
-        filmstripTrailingConstraint?.constant = -(GlassMetrics.floatingInset + reserved)
-        pageNavigationTrailingConstraint?.constant = -reserved
-        rootView.layoutSubtreeIfNeeded()
+        Motion.run(
+            in: animated ? rootView : nil,
+            duration: Motion.expressive,
+            timing: Motion.move,
+            animatesLayout: true
+        ) {
+            filmstripCenterXConstraint?.constant = -reserved / 2
+            filmstripTrailingConstraint?.constant = -(GlassMetrics.floatingInset + reserved)
+            pageNavigationTrailingConstraint?.constant = -reserved
+            // 画布始终铺满整窗，模糊底才连成一片，玻璃底下也才有东西可以折射。
+            // 图片靠 contentInsets 避开面板，和它避开上下边栏是同一套做法。
+            updateCanvasContentInsets(chromeVisible: isChromeVisible, animated: animated)
+            rootView.layoutSubtreeIfNeeded()
+        }
     }
 
     /// 胶卷条的显示只由「开关有没有打开」决定。
@@ -2144,40 +2219,27 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             hideFilmstripOverlay(immediately: !animated)
             return
         }
-
-        filmstripVisibilityGeneration += 1
-        filmstripOverlayView.isHidden = false
-        guard filmstripOverlayView.alphaValue < 1 else { return }
-        guard animated else {
-            filmstripOverlayView.alphaValue = 1
-            return
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
-            filmstripOverlayView.animator().alphaValue = 1
-        }
+        setFilmstripOverlayVisible(true, animated: animated)
     }
 
     private func hideFilmstripOverlay(immediately: Bool = false) {
-        filmstripVisibilityGeneration += 1
-        guard !filmstripOverlayView.isHidden else { return }
+        setFilmstripOverlayVisible(false, animated: !immediately)
+    }
 
-        if immediately {
-            filmstripOverlayView.alphaValue = 0
-            filmstripOverlayView.isHidden = true
-            return
-        }
-
-        let generation = filmstripVisibilityGeneration
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.overlayFadeOutDuration
-            filmstripOverlayView.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self, self.filmstripVisibilityGeneration == generation else { return }
-                self.filmstripOverlayView.isHidden = true
-            }
-        }
+    /// 胶卷条从下边栏那一侧升起来，收起时按原路退回去。
+    private func setFilmstripOverlayVisible(_ visible: Bool, animated: Bool) {
+        Motion.setVisible(
+            filmstripOverlayView,
+            visible,
+            slide: Motion.Slide(
+                filmstripBottomConstraint,
+                visible: Self.filmstripBottomSpacing,
+                hidden: Self.filmstripHiddenBottomSpacing,
+                in: rootView
+            ),
+            duration: Self.overlayRevealDuration,
+            animated: animated
+        )
     }
 
     private func configureFilmstripSlider() {
@@ -2220,7 +2282,8 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         canvas.wantsLayer = true
         let transition = CATransition()
         transition.duration = Self.navigationTransitionDuration
-        transition.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        // 和其余入场动作同一条曲线：推得快，收得住。
+        transition.timingFunction = Motion.entrance
         if let slide {
             transition.type = .push
             transition.subtype = slide
@@ -2242,13 +2305,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         }
 
         cancelPageControlsAutoHide()
-        pageNavigationOverlayView.isHidden = false
-        if pageNavigationOverlayView.alphaValue < 1 {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.14
-                pageNavigationOverlayView.animator().alphaValue = 1
-            }
-        }
+        pageNavigationOverlayView.setPresented(true)
         schedulePageControlsAutoHide()
     }
 
@@ -2284,24 +2341,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
 
     private func hidePageControls(immediately: Bool = false) {
         cancelPageControlsAutoHide()
-        guard !pageNavigationOverlayView.isHidden else { return }
-
-        if immediately {
-            pageNavigationOverlayView.alphaValue = 0
-            pageNavigationOverlayView.isHidden = true
-            return
-        }
-
-        let generation = pageControlsVisibilityGeneration
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.overlayFadeOutDuration
-            pageNavigationOverlayView.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self, self.pageControlsVisibilityGeneration == generation else { return }
-                self.pageNavigationOverlayView.isHidden = true
-            }
-        }
+        pageNavigationOverlayView.setPresented(false, animated: !immediately)
     }
 
     private func configureContentBars() {
@@ -2387,13 +2427,13 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         bottomZoomLabel.setAccessibilityLabel(AppStrings.text("viewer.zoom.menu.accessibilityLabel"))
         bottomZoomLabel.addGestureRecognizer(bottomZoomClickRecognizer)
         let showInfoText = AppStrings.text("menu.view.showInfo")
-        bottomInfoButton.image = NSImage(systemSymbolName: Self.bottomBarInfoSymbolName, accessibilityDescription: showInfoText)
-        bottomInfoButton.bezelStyle = .toolbar
-        bottomInfoButton.isBordered = false
-        bottomInfoButton.toolTip = showInfoText
-        bottomInfoButton.setAccessibilityLabel(showInfoText)
-        bottomInfoButton.target = self
-        bottomInfoButton.action = #selector(toggleInspector(_:))
+        configureTitleBarButton(
+            bottomInfoButton,
+            symbolName: Self.bottomBarInfoSymbolName,
+            accessibilityDescription: showInfoText,
+            action: #selector(toggleInspector(_:))
+        )
+        bottomInfoButton.setAccessibilityRole(.checkBox)
 
         filmstripOverlayView.isHidden = true
         pageNavigationOverlayView.isHidden = true
@@ -2563,15 +2603,16 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         loadPhase: ImageLoadPhase,
         hasError: Bool
     ) {
-        emptyStateView.isHidden = isFolderBrowserMode || !Self.shouldDisplayEmptyState(
+        // 空状态和错误状态互相接力，硬切会闪一下，让它们淡入淡出。
+        Motion.setVisible(emptyStateView, !isFolderBrowserMode && Self.shouldDisplayEmptyState(
             hasCurrentImage: hasCurrentImage,
             loadPhase: loadPhase,
             hasError: hasError
-        )
-        errorStateView.isHidden = isFolderBrowserMode || !Self.shouldDisplayErrorState(
+        ), duration: Motion.standard)
+        Motion.setVisible(errorStateView, !isFolderBrowserMode && Self.shouldDisplayErrorState(
             hasCurrentImage: hasCurrentImage,
             hasError: hasError
-        )
+        ), duration: Motion.standard)
 
         let shouldHideStatusContent = isFolderBrowserMode || Self.shouldHideImageStatusContent(
             hasCurrentImage: hasCurrentImage
@@ -2579,10 +2620,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         for view in [bottomDimensionLabel, bottomPageLabel, bottomZoomLabel, bottomInfoButton] {
             view.isHidden = shouldHideStatusContent
         }
-        inspectorView.isHidden = !Self.shouldDisplayInspector(
-            isEnabled: settings.showsInspector,
-            hasCurrentImage: hasCurrentImage
-        ) || isFolderBrowserMode
+        updateInspectorPresentation(hasCurrentImage: hasCurrentImage)
         if hasCurrentImage && loadPhase == .full && !isFolderBrowserMode {
             showUsageHintIfNeeded()
         } else if !hasCurrentImage || isFolderBrowserMode {
@@ -2593,8 +2631,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private func showUsageHintIfNeeded() {
         guard !settings.hasShownUsageHint, usageHintView.isHidden else { return }
         settings.hasShownUsageHint = true
-        usageHintView.alphaValue = 1
-        usageHintView.isHidden = false
+        setUsageHintVisible(true)
         NSAccessibility.post(element: usageHintView, notification: .announcementRequested)
         usageHintTimer?.invalidate()
         usageHintTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
@@ -2605,7 +2642,22 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private func hideUsageHint() {
         usageHintTimer?.invalidate()
         usageHintTimer = nil
-        usageHintView.isHidden = true
+        setUsageHintVisible(false)
+    }
+
+    /// 提示条从标题栏底下垂下来，收起时缩回去。
+    private func setUsageHintVisible(_ visible: Bool) {
+        Motion.setVisible(
+            usageHintView,
+            visible,
+            slide: Motion.Slide(
+                usageHintTopConstraint,
+                visible: Self.usageHintTopSpacing,
+                hidden: Self.usageHintHiddenTopSpacing,
+                in: rootView
+            ),
+            duration: Motion.standard
+        )
     }
 
     private func revealFullScreenChromeIfNeeded() {
@@ -2620,25 +2672,49 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         }
     }
 
+    /// 全屏里上下两条栏的收放。
+    ///
+    /// 两条栏一边把高度收到零一边淡出，图片同时补上让出来的空间。
+    /// 只改 `isHidden` 的话，画面会在指针停下的一瞬间整个跳一下。
     private func setFullScreenChromeVisible(_ visible: Bool) {
         isChromeVisible = visible
-        titleBarHeightConstraint.constant = visible ? Self.titleBarHeight : 0
-        bottomBarHeightConstraint.constant = visible ? Self.bottomBarHeight : 0
-        titleBarView.isHidden = !visible
-        bottomBarView.isHidden = !visible
-        updateCanvasContentInsets(chromeVisible: visible)
+        Motion.setVisible(
+            titleBarView,
+            visible,
+            slide: Motion.Slide(
+                titleBarHeightConstraint,
+                visible: Self.titleBarHeight,
+                hidden: 0,
+                in: rootView,
+                restoresWhenHidden: false
+            ),
+            duration: Motion.expressive
+        )
+        Motion.setVisible(
+            bottomBarView,
+            visible,
+            slide: Motion.Slide(
+                bottomBarHeightConstraint,
+                visible: Self.bottomBarHeight,
+                hidden: 0,
+                in: rootView,
+                restoresWhenHidden: false
+            ),
+            duration: Motion.expressive
+        )
+        updateCanvasContentInsets(chromeVisible: visible, animated: true)
         rootView.needsLayout = true
     }
 
     /// 图片要避开的四周空间。画布本身铺满整窗，让出来的只是图片的位置。
-    private func updateCanvasContentInsets(chromeVisible: Bool) {
+    private func updateCanvasContentInsets(chromeVisible: Bool, animated: Bool = false) {
         let insets = NSEdgeInsets(
             top: chromeVisible ? Self.titleBarHeight : 0,
             left: 0,
             bottom: chromeVisible ? Self.bottomBarHeight : 0,
             right: reservedInspectorWidth
         )
-        canvas.contentInsets = insets
+        canvas.setContentInsets(insets, animated: animated)
     }
 
     private func announceLoadedImageIfNeeded(hasImage: Bool, loadPhase: ImageLoadPhase) {
@@ -2673,16 +2749,17 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             updateEditControls()
         }
         isFolderBrowserMode = true
-        canvas.isHidden = true
-        continuousReadingView.isHidden = true
+        // 网格铺上来，单图和连续浏览同时退下去，两边的透明度对着走。
+        Motion.setVisible(folderBrowserView, true, duration: Motion.expressive)
+        setCanvasVisible(false)
+        Motion.setVisible(continuousReadingView, false, duration: Motion.standard)
         continuousReadingTask?.cancel()
-        folderBrowserView.isHidden = false
-        emptyStateView.isHidden = true
-        errorStateView.isHidden = true
-        hideFilmstripOverlay(immediately: true)
-        hidePageControls(immediately: true)
-        cropOverlay.isHidden = true
-        cropControlsView.isHidden = true
+        Motion.setVisible(emptyStateView, false, duration: Motion.quick)
+        Motion.setVisible(errorStateView, false, duration: Motion.quick)
+        hideFilmstripOverlay()
+        hidePageControls()
+        Motion.setVisible(cropOverlay, false, duration: Motion.quick)
+        Motion.setVisible(cropControlsView, false, duration: Motion.quick)
         updateEmptyStatePresentation()
         updateInspectorLayout()
     }
@@ -2690,7 +2767,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private func exitFolderBrowserMode() {
         guard isFolderBrowserMode || !folderBrowserView.isHidden || canvas.isHidden else { return }
         isFolderBrowserMode = false
-        folderBrowserView.isHidden = true
+        Motion.setVisible(folderBrowserView, false, duration: Motion.expressive)
         updateContinuousReadingPresentation()
         updateEmptyStatePresentation()
         updateInspectorLayout()
@@ -2729,6 +2806,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     var isInspectorVisibleForTesting: Bool { !inspectorView.isHidden }
+    var inspectorAlphaForTesting: CGFloat { inspectorView.alphaValue }
+    var isEditControlsVisibleForTesting: Bool { !cropControlsView.isHidden }
+    var editControlsAlphaForTesting: CGFloat { cropControlsView.alphaValue }
+    var cropOverlayAlphaForTesting: CGFloat { cropOverlay.alphaValue }
     var hasLoadedImageForTesting: Bool { viewModel.currentImage != nil }
     var canEditCurrentImageForTesting: Bool { viewModel.canEditCurrentImage }
     var currentImageURLForTesting: URL? { viewModel.navigationState?.currentItem?.url }
@@ -2767,6 +2848,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var filmstripHighlightedTitleForTesting: String? { filmstripView.debugSelectedTitle() }
     #endif
     var bottomBarFrameForTesting: NSRect { bottomBarView.frame }
+    var bottomInfoButtonForTesting: HoverToolbarButton { bottomInfoButton }
     var titleBarFilmstripButtonForTesting: HoverToolbarButton { titleBarFilmstripButton }
     var titleBarEditButtonForTesting: HoverToolbarButton { titleBarEditButton }
     var titleBarContinuousReadingButtonForTesting: HoverToolbarButton { titleBarContinuousReadingButton }

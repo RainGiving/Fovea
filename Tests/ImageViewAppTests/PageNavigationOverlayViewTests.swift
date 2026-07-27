@@ -93,6 +93,29 @@ final class PageNavigationOverlayViewTests: XCTestCase {
         }
     }
 
+    /// 进出是「淡入淡出加一段贴边位移」，落位之后按钮要回到正常的边距上，
+    /// 否则藏起来那段时间量出来的位置是偏的。
+    func testPresentationSettlesButtonsAtTheirRestingInset() {
+        let view = PageNavigationOverlayView(frame: NSRect(x: 0, y: 0, width: 500, height: 320))
+        view.layoutSubtreeIfNeeded()
+
+        view.setPresented(false)
+
+        XCTAssertTrue(view.isHidden)
+        XCTAssertEqual(view.debugPreviousButton.frame.minX, PageNavigationOverlayView.edgeInset, accuracy: 0.001)
+        XCTAssertEqual(
+            view.bounds.maxX - view.debugNextButton.frame.maxX,
+            PageNavigationOverlayView.edgeInset,
+            accuracy: 0.001
+        )
+
+        view.setPresented(true)
+
+        XCTAssertFalse(view.isHidden)
+        XCTAssertEqual(view.alphaValue, 1, accuracy: 0.001)
+        XCTAssertEqual(view.debugPreviousButton.frame.minX, PageNavigationOverlayView.edgeInset, accuracy: 0.001)
+    }
+
     func testHoverLiftsSymbolToAccentColorAndDisabledDropsIt() {
         let view = PageNavigationOverlayView()
         let button = view.debugNextButton

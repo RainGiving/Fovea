@@ -308,6 +308,53 @@ final class ImageCanvasView: NSView {
         }
     }
 
+    /// 可用区域变化时让图片滑过去，而不是瞬间跳到新位置。
+    ///
+    /// 停靠信息栏、收放 chrome 都是慢慢让出一条空间，图片得跟着一起走。
+    func setContentInsets(
+        _ insets: NSEdgeInsets,
+        animated: Bool,
+        duration: TimeInterval = Motion.expressive,
+        timing: CAMediaTimingFunction = Motion.move
+    ) {
+        guard animated, !areInsetsEqual(contentInsets, insets) else {
+            contentInsets = insets
+            return
+        }
+        withAnimatedGeometry(duration: duration, timing: timing) {
+            contentInsets = insets
+        }
+    }
+
+    /// 让这一段几何改动滑过去。
+    ///
+    /// 图层平时把几何动画全关着，拖动和捏合才不会拖出一条尾巴。菜单里选一档
+    /// 缩放、双击在原始大小和适应窗口之间切换，这类一步到位的改动要的正好相反，
+    /// 这里只在这一次赋值期间把几何交回给隐式动画。
+    func withAnimatedGeometry(
+        duration: TimeInterval = Motion.standard,
+        timing: CAMediaTimingFunction = Motion.move,
+        _ changes: () -> Void
+    ) {
+        guard Motion.canAnimate(self) else {
+            changes()
+            return
+        }
+
+        let suppressedActions = imageLayer.actions
+        imageLayer.actions = nil
+        backdropLayer.actions = nil
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(duration)
+        CATransaction.setAnimationTimingFunction(timing)
+        changes()
+        CATransaction.commit()
+        // 动画在赋值那一刻就挂到图层上了，抑制可以马上装回去，
+        // 后面的拖动仍然没有隐式动画。
+        imageLayer.actions = suppressedActions
+        backdropLayer.actions = suppressedActions
+    }
+
     var contentBounds: CGRect {
         CGRect(
             x: bounds.minX + contentInsets.left,

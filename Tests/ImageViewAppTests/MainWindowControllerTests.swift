@@ -53,6 +53,26 @@ final class MainWindowControllerTests: XCTestCase {
         ))
     }
 
+    /// 底部那颗信息按钮和标题栏的开关是同一种按钮：打开时着强调色，
+    /// 悬停按下都有反馈，不再是一颗没有状态的图标。
+    func testBottomInfoButtonMirrorsTheInspectorSetting() async {
+        let settings = AppSettings(defaults: makeIsolatedDefaults())
+        settings.showsInspector = false
+        let controller = MainWindowController(settings: settings)
+        let button = controller.bottomInfoButtonForTesting
+
+        XCTAssertFalse(button.isOnState)
+
+        controller.toggleInspector(nil)
+        // 设置变化经由一次主队列跳转才落到界面上。
+        for _ in 0..<100 where !button.isOnState {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(settings.showsInspector)
+        XCTAssertTrue(button.isOnState)
+    }
+
     func testTitleBarFilmstripButtonMirrorsTheSetting() {
         let settings = AppSettings(defaults: makeIsolatedDefaults())
         settings.showsFilmstrip = false
@@ -469,6 +489,39 @@ final class MainWindowControllerTests: XCTestCase {
         for item in [rename, reveal, trash, rotate, crop, zoom] {
             XCTAssertFalse(controller.validateMenuItem(item), "\(item.title) should not target the hidden viewer")
         }
+    }
+
+    /// 进出编辑是遮罩和控制条一起动的一个动作。没上屏时不播动画，
+    /// 两件事都必须当场落到位，不能留一个半透明的控制条挂在那里。
+    func testEnteringAndLeavingEditModeSettlesTheCropChrome() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("edit.png")
+        try writeTestPNG(to: imageURL)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+
+        XCTAssertFalse(controller.isEditControlsVisibleForTesting)
+
+        controller.startEditingImage(nil)
+
+        XCTAssertTrue(controller.isCroppingForTesting)
+        XCTAssertTrue(controller.isEditControlsVisibleForTesting)
+        XCTAssertEqual(controller.editControlsAlphaForTesting, 1, accuracy: 0.001)
+        XCTAssertEqual(controller.cropOverlayAlphaForTesting, 1, accuracy: 0.001)
+        XCTAssertFalse(controller.isPageControlsVisibleForTesting, "编辑时翻页按钮让路")
+
+        controller.cancelCrop(nil)
+
+        XCTAssertFalse(controller.isCroppingForTesting)
+        XCTAssertFalse(controller.isEditControlsVisibleForTesting)
+        XCTAssertEqual(controller.editControlsAlphaForTesting, 0, accuracy: 0.001)
     }
 
     func testEnteringFolderBrowserEndsActiveCropSession() async throws {
@@ -952,7 +1005,17 @@ final class MainWindowControllerTests: XCTestCase {
 
     func testFilmstripAndPageControlsShareDisappearanceTiming() {
         XCTAssertEqual(MainWindowController.overlayAutoHideDelay, 1.8)
-        XCTAssertEqual(MainWindowController.overlayFadeOutDuration, 0.18)
+        // 两块浮层的进出都从 Motion 取同一档，收起比出现快一截。
+        XCTAssertEqual(MainWindowController.overlayRevealDuration, Motion.standard)
+        XCTAssertEqual(
+            MainWindowController.overlayFadeOutDuration,
+            Motion.standard * Motion.exitRatio,
+            accuracy: 0.0001
+        )
+        XCTAssertLessThan(
+            MainWindowController.overlayFadeOutDuration,
+            MainWindowController.overlayRevealDuration
+        )
     }
 
     func testFullScreenChromeStartsHiddenAndReappearsForInteraction() {

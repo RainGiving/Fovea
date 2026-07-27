@@ -88,8 +88,16 @@ final class PageNavigationOverlayView: NSView {
     var onPointerEntered: (() -> Void)?
     var onPointerExited: (() -> Void)?
 
+    /// 两颗按钮离画面边缘的距离。
+    static let edgeInset: CGFloat = 16
+
+    /// 收起时按钮贴回边缘的距离。淡出的同时往边上退一小段，方向感更明确。
+    static let hiddenEdgeInset: CGFloat = 2
+
     private let previousButton = PageNavigationButton()
     private let nextButton = PageNavigationButton()
+    private var previousLeadingConstraint: NSLayoutConstraint!
+    private var nextTrailingConstraint: NSLayoutConstraint!
     private var pointerTrackingAreas: [NSTrackingArea] = []
 
     override init(frame frameRect: NSRect = .zero) {
@@ -110,16 +118,69 @@ final class PageNavigationOverlayView: NSView {
         addSubview(previousButton)
         addSubview(nextButton)
 
+        previousLeadingConstraint = previousButton.leadingAnchor.constraint(
+            equalTo: leadingAnchor,
+            constant: Self.edgeInset
+        )
+        nextTrailingConstraint = nextButton.trailingAnchor.constraint(
+            equalTo: trailingAnchor,
+            constant: -Self.edgeInset
+        )
         NSLayoutConstraint.activate([
-            previousButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            previousLeadingConstraint,
             previousButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             previousButton.widthAnchor.constraint(equalToConstant: Self.controlSize.width),
             previousButton.heightAnchor.constraint(equalToConstant: Self.controlSize.height),
-            nextButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            nextTrailingConstraint,
             nextButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             nextButton.widthAnchor.constraint(equalToConstant: Self.controlSize.width),
             nextButton.heightAnchor.constraint(equalToConstant: Self.controlSize.height)
         ])
+    }
+
+    /// 浮层的进出。
+    ///
+    /// 整体淡入淡出的同时，两颗按钮从画面边缘滑进来、再退回去。单纯改透明度
+    /// 会让人觉得按钮是「亮起来」的，带上这一小段位移才像是从边上探出来。
+    func setPresented(_ presented: Bool, animated: Bool = true, completion: @escaping @MainActor () -> Void = {}) {
+        // 指针每动一下都会来问一次，已经是目标状态就什么都不做。
+        let isSettled = presented
+            ? !isHidden && alphaValue == 1
+            : isHidden && alphaValue == 0
+        guard !isSettled else {
+            completion()
+            return
+        }
+        let animates = animated && Motion.canAnimate(self)
+        // 从收起状态出现时，按钮先回到贴边的起点。
+        if presented, animates, isHidden {
+            applyEdgeInset(Self.hiddenEdgeInset)
+        }
+
+        Motion.setVisible(self, presented, duration: Motion.standard, animated: animated) { [self] in
+            // 收起之后按钮放回正常位置，别人量它的位置时读到的是该有的那个。
+            applyEdgeInset(Self.edgeInset)
+            completion()
+        }
+
+        guard animates else {
+            applyEdgeInset(Self.edgeInset)
+            return
+        }
+        Motion.run(
+            in: self,
+            duration: presented ? Motion.standard : Motion.standard * Motion.exitRatio,
+            timing: presented ? Motion.entrance : Motion.exit,
+            animatesLayout: true
+        ) { [self] in
+            applyEdgeInset(presented ? Self.edgeInset : Self.hiddenEdgeInset)
+        }
+    }
+
+    private func applyEdgeInset(_ inset: CGFloat) {
+        previousLeadingConstraint.constant = inset
+        nextTrailingConstraint.constant = -inset
+        layoutSubtreeIfNeeded()
     }
 
     @available(*, unavailable)
