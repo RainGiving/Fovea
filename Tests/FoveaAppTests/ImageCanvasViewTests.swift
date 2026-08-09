@@ -5,6 +5,47 @@ import FoveaCore
 
 @MainActor
 final class ImageCanvasViewTests: XCTestCase {
+    func testBackdropKeepsTheSourceAspectRatioAndBroadLightDarkStructure() throws {
+        let context = CGContext(
+            data: nil,
+            width: 400,
+            height: 200,
+            bitsPerComponent: 8,
+            bytesPerRow: 400 * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.setFillColor(NSColor.black.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(CGRect(x: 200, y: 0, width: 200, height: 200))
+
+        let backdrop = try XCTUnwrap(
+            ImageCanvasView.makeBackdrop(from: XCTUnwrap(context.makeImage()), sampleSize: 320)
+        )
+
+        XCTAssertEqual(backdrop.width, 320)
+        XCTAssertEqual(backdrop.height, 160)
+        XCTAssertLessThan(try redChannel(in: backdrop, atX: 32), 64)
+        XCTAssertGreaterThan(try redChannel(in: backdrop, atX: 287), 191)
+    }
+
+    func testBackdropRenderingDoesNotBlockTheMainImageLayer() async throws {
+        let canvas = ImageCanvasView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
+        canvas.image = makeDecodedImage(width: 400, height: 200)
+        let layers = try XCTUnwrap(canvas.layer?.sublayers)
+
+        XCTAssertNotNil(layers[1].contents, "原图应在赋值当轮直接提交")
+        XCTAssertNil(layers[0].contents, "模糊底应在后台生成")
+
+        for _ in 0..<200 where layers[0].contents == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let backdrop = try XCTUnwrap(layers[0].contents) as! CGImage
+        XCTAssertEqual(backdrop.width, 320)
+        XCTAssertEqual(backdrop.height, 160)
+    }
+
     func testZoomAtCanvasCenterKeepsZeroOffset() {
         let canvas = ImageCanvasView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
         canvas.image = makeDecodedImage(width: 400, height: 300)
@@ -356,5 +397,21 @@ final class ImageCanvasViewTests: XCTestCase {
             pixelSize: CGSize(width: width, height: height),
             isAnimated: false
         )
+    }
+
+    private func redChannel(in image: CGImage, atX x: Int) throws -> UInt8 {
+        let pixel = try XCTUnwrap(image.cropping(to: CGRect(x: x, y: image.height / 2, width: 1, height: 1)))
+        var bytes = [UInt8](repeating: 0, count: 4)
+        let context = try XCTUnwrap(CGContext(
+            data: &bytes,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return bytes[0]
     }
 }

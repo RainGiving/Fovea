@@ -27,6 +27,15 @@ private func detachedDecode(
     try await ImageDecodeExecutor.shared.decode(operation)
 }
 
+/// 预览解码有自己的小队列，完整图和后台预读占满时仍能先给出可看的画面。
+private let previewDecodeExecutor = ImageDecodeExecutor(maxConcurrentDecodeCount: 2)
+
+private func detachedPreviewDecode(
+    _ operation: @escaping @Sendable () throws -> DecodedImage
+) async throws -> DecodedImage {
+    try await previewDecodeExecutor.decode(operation)
+}
+
 @MainActor
 final class ViewerViewModel: ObservableObject {
     var onSuccessfulOpen: ((URL) -> Void)?
@@ -131,7 +140,7 @@ final class ViewerViewModel: ObservableObject {
             self.loadPreviewAtURL = loadPreviewAtURL
         } else {
             self.loadPreviewAtURL = { url, format in
-                try await detachedDecode {
+                try await detachedPreviewDecode {
                     try ImageDecodeService().decode(url: url, format: format, maxPixelSize: 2_048)
                 }
             }
@@ -322,45 +331,48 @@ final class ViewerViewModel: ObservableObject {
         }
     }
 
-    func showNext() {
+    @discardableResult
+    func showNext() -> Bool {
         lastNavigationDirection = .forward
         let previousURL = navigationState?.currentItem?.url
         navigationState?.moveNext()
-        if navigationState?.currentItem?.url != previousURL {
-            loadPhase = .loading
-        }
+        guard navigationState?.currentItem?.url != previousURL else { return false }
+        loadPhase = .loading
         updateDisplayTitle()
         startDisplayCurrentAndPreload()
+        return true
     }
 
-    func showPrevious() {
+    @discardableResult
+    func showPrevious() -> Bool {
         lastNavigationDirection = .backward
         let previousURL = navigationState?.currentItem?.url
         navigationState?.movePrevious()
-        if navigationState?.currentItem?.url != previousURL {
-            loadPhase = .loading
-        }
+        guard navigationState?.currentItem?.url != previousURL else { return false }
+        loadPhase = .loading
         updateDisplayTitle()
         startDisplayCurrentAndPreload()
+        return true
     }
 
-    func show(item: ImageItem) {
+    @discardableResult
+    func show(item: ImageItem) -> Bool {
         guard let state = navigationState,
               state.items.contains(item) else {
             Task { await open(url: item.url) }
-            return
+            return true
         }
 
+        guard state.currentItem?.url != item.url else { return false }
         // 从胶卷条直接跳，方向按跳过去的那一侧算。
         if let from = state.currentIndex, let to = state.items.firstIndex(of: item) {
             lastNavigationDirection = to >= from ? .forward : .backward
         }
         navigationState = NavigationState(items: state.items, currentURL: item.url)
-        if state.currentItem?.url != navigationState?.currentItem?.url {
-            loadPhase = .loading
-        }
+        loadPhase = .loading
         updateDisplayTitle()
         startDisplayCurrentAndPreload()
+        return true
     }
 
     func moveCurrentToTrash() {
@@ -751,17 +763,66 @@ final class ViewerViewModel: ObservableObject {
 
     private func displayCurrentAndPreload(item: ImageItem, generation: UInt64) async {
         do {
-            let loaded = try await display(url: item.url, format: item.format)
-            guard generation == displayRequestGeneration,
-                  navigationState?.currentItem?.url == item.url else {
-                return
+            let loadPreviewAtURL = self.loadPreviewAtURL
+            let loadImageAtURL = self.loadImageAtURL
+            let (events, continuation) = AsyncThrowingStream<ImageLoadEvent, Error>.makeStream()
+            let previewTask: Task<Void, Never>? = if shouldLoadPreviewAtURL(item.url) {
+                Task {
+                    do {
+                        let image = try await loadPreviewAtURL(item.url, item.format)
+                        try Task.checkCancellation()
+                        continuation.yield(.preview(image))
+                    } catch {
+                        // 预览失败不影响完整图片继续加载。
+                    }
+                }
+            } else {
+                nil
             }
-            currentImage = loaded.image
-            persistedCurrentImage = loaded.image
-            displayedFileVersion = loaded.version
-            updateMetadata(url: item.url, format: item.format, image: loaded.image)
-            loadPhase = .full
-            preloadNeighbors()
+            let fullTask = Task {
+                do {
+                    let image = try await loadImageAtURL(item.url, item.format)
+                    try Task.checkCancellation()
+                    continuation.yield(.full(image))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            let cancelProgressiveLoad: @Sendable () -> Void = {
+                previewTask?.cancel()
+                fullTask.cancel()
+                continuation.finish()
+            }
+            cancelActiveProgressiveLoad = cancelProgressiveLoad
+            defer {
+                cancelProgressiveLoad()
+                if generation == displayRequestGeneration {
+                    cancelActiveProgressiveLoad = nil
+                }
+            }
+
+            eventLoop: for try await event in events {
+                guard generation == displayRequestGeneration,
+                      navigationState?.currentItem?.url == item.url else { break }
+
+                switch event {
+                case let .preview(image):
+                    guard loadPhase != .full else { continue }
+                    currentMetadata = nil
+                    loadPhase = .preview
+                    currentImage = image
+                case let .full(loaded):
+                    persistedCurrentImage = loaded.image
+                    displayedFileVersion = loaded.version
+                    updateMetadata(url: item.url, format: item.format, image: loaded.image)
+                    loadPhase = .full
+                    currentImage = loaded.image
+                    preloadNeighbors()
+                    cancelProgressiveLoad()
+                    break eventLoop
+                }
+            }
         } catch {
             guard generation == displayRequestGeneration,
                   navigationState?.currentItem?.url == item.url else {
@@ -853,6 +914,9 @@ final class ViewerViewModel: ObservableObject {
         hasUnsavedEdits = false
         let generation = beginDisplayRequest()
         loadPhase = .loading
+        currentMetadata = nil
+        persistedCurrentImage = nil
+        displayedFileVersion = nil
         if !preservingError {
             errorMessage = nil
         }

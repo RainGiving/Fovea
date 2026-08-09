@@ -209,6 +209,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private var cropAspectRatio: CropAspectRatio = .free
     /// 上一次重置查看旋转时对应的条目，用来区分换图和编辑后重绘。
     private var lastViewRotationItemID: ImageItem.ID?
+    /// 同一条目的预览和完整图只播放一次换页过渡。
+    private var lastTransitionedItemID: ImageItem.ID?
+    private var hasTransitionedCurrentItem = false
     /// 这一次换图该往哪个方向滑。翻页时设，画面更新后消费掉。
     private var pendingNavigationSlide: CATransitionSubtype?
     /// 正在拖滑杆。此时忽略胶卷条回传的进度，避免自己推自己。
@@ -532,9 +535,19 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                 self.refreshPresentation()
                 let slide = self.pendingNavigationSlide
                 self.pendingNavigationSlide = nil
+                if image == nil {
+                    self.lastTransitionedItemID = nil
+                    self.hasTransitionedCurrentItem = false
+                }
+                let shouldTransition = image != nil
+                    && (!self.hasTransitionedCurrentItem || itemID != self.lastTransitionedItemID)
+                if shouldTransition {
+                    self.lastTransitionedItemID = itemID
+                    self.hasTransitionedCurrentItem = true
+                }
                 guard self.settings.animatesNavigationTransitions,
                       !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                      image != nil else { return }
+                      shouldTransition else { return }
                 self.playNavigationTransition(slide: slide)
             }
             .store(in: &cancellables)
@@ -2378,7 +2391,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         canvas.layer?.add(transition, forKey: "navigation")
     }
 
-    static let navigationTransitionDuration: CFTimeInterval = 0.24
+    static let navigationTransitionDuration: CFTimeInterval = 0.16
 
     private func revealPageControls() {
         guard presentation.allowsPageControls else {
@@ -3091,29 +3104,33 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
 
     private func navigateToNextImage() {
         guard presentation.allowsImageCommands else { return }
-        pendingNavigationSlide = .fromRight
         cancelCrop(nil)
         confirmUnsavedEditsIfNeeded(for: .navigating) { [weak self] in
             guard let self else { return }
+            self.pendingNavigationSlide = .fromRight
+            let didNavigate: Bool
             if self.settings.readingDirection == .leftToRight {
-                self.viewModel.showNext()
+                didNavigate = self.viewModel.showNext()
             } else {
-                self.viewModel.showPrevious()
+                didNavigate = self.viewModel.showPrevious()
             }
+            if !didNavigate { self.pendingNavigationSlide = nil }
         }
     }
 
     private func navigateToPreviousImage() {
         guard presentation.allowsImageCommands else { return }
-        pendingNavigationSlide = .fromLeft
         cancelCrop(nil)
         confirmUnsavedEditsIfNeeded(for: .navigating) { [weak self] in
             guard let self else { return }
+            self.pendingNavigationSlide = .fromLeft
+            let didNavigate: Bool
             if self.settings.readingDirection == .leftToRight {
-                self.viewModel.showPrevious()
+                didNavigate = self.viewModel.showPrevious()
             } else {
-                self.viewModel.showNext()
+                didNavigate = self.viewModel.showNext()
             }
+            if !didNavigate { self.pendingNavigationSlide = nil }
         }
     }
 

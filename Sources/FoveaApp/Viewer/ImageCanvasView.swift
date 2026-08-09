@@ -38,6 +38,8 @@ final class ImageCanvasView: NSView {
     /// 由 GPU 做，主线程只写几个数。
     private let backdropLayer = CALayer()
     private let imageLayer = CALayer()
+    private var backdropTask: Task<Void, Never>?
+    private var backdropGeneration: UInt64 = 0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -96,9 +98,9 @@ final class ImageCanvasView: NSView {
         didSet {
             currentAnimationFrameIndex = 0
             configureAnimation()
-            rebuildBackdrop()
             if displayMode == .fitWidth { zoomToFitWidth() }
             refreshLayers()
+            rebuildBackdropInBackground()
             onTransformChanged?(scale)
         }
     }
@@ -109,42 +111,47 @@ final class ImageCanvasView: NSView {
     /// 画在上面，留白区域拿到的是这张图自己的颜色，而不是一块死板的灰。
     private var backdropImage: CGImage?
 
-    /// 采样边长。缩到这么小几乎不花时间，柔和交给后面的高斯。
-    static let backdropSampleSize = 64
+    /// 采样长边。保留足够的明暗轮廓，铺满窗口后仍能看出原图的空间关系。
+    nonisolated static let backdropSampleSize = 320
 
     /// 高斯半径按采样边长的比例取，换采样尺寸时观感不变。
-    static let backdropBlurRatio: CGFloat = 0.22
+    nonisolated static let backdropBlurRatio: CGFloat = 0.018
 
-    /// 底色的不透明度。压住一些，避免和图片本身抢注意力。
-    static let backdropAlpha: CGFloat = 0.6
+    /// 留一点画布底色压住背景，同时保留原图的层次和颜色。
+    nonisolated static let backdropAlpha: CGFloat = 0.88
 
-    private static let backdropRenderContext = CIContext(options: [.useSoftwareRenderer: false])
+    nonisolated private static let backdropRenderContext = CIContext(options: [.useSoftwareRenderer: false])
 
     /// 把图片熬成一层柔和的底色。
     ///
     /// 只缩不糊是不够的。缩完再放大铺满整窗，双线性插值会在每两个采样点之间
     /// 留下一道折痕，一片渐变里能看出网格，看着就是生硬。缩完真正做一次高斯，
     /// 把这些接缝抹平，放大之后才是连续的。
-    static func makeBackdrop(from source: CGImage, sampleSize: Int = backdropSampleSize) -> CGImage? {
-        let side = max(1, sampleSize)
+    nonisolated static func makeBackdrop(from source: CGImage, sampleSize: Int = backdropSampleSize) -> CGImage? {
+        let maximumDimension = max(1, sampleSize)
+        let sourceMaximumDimension = max(source.width, source.height)
+        let sampleScale = min(1, CGFloat(maximumDimension) / CGFloat(max(1, sourceMaximumDimension)))
+        let sampleWidth = max(1, Int((CGFloat(source.width) * sampleScale).rounded()))
+        let sampleHeight = max(1, Int((CGFloat(source.height) * sampleScale).rounded()))
         guard let context = CGContext(
             data: nil,
-            width: side,
-            height: side,
+            width: sampleWidth,
+            height: sampleHeight,
             bitsPerComponent: 8,
             bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
         ) else { return nil }
         context.interpolationQuality = .high
-        context.draw(source, in: CGRect(x: 0, y: 0, width: side, height: side))
+        context.draw(source, in: CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight))
         guard let downsampled = context.makeImage() else { return nil }
 
         // 不先夹边的话，高斯会把画面外的透明像素混进来，四周压出一圈暗角。
-        let extent = CGRect(x: 0, y: 0, width: side, height: side)
+        let extent = CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight)
+        let blurRadius = CGFloat(max(sampleWidth, sampleHeight)) * backdropBlurRatio
         let blurred = CIImage(cgImage: downsampled)
             .clampedToExtent()
-            .applyingGaussianBlur(sigma: Double(CGFloat(side) * backdropBlurRatio))
+            .applyingGaussianBlur(sigma: Double(blurRadius))
             .cropped(to: extent)
         return backdropRenderContext.createCGImage(blurred, from: extent) ?? downsampled
     }
@@ -162,12 +169,32 @@ final class ImageCanvasView: NSView {
         )
     }
 
-    private func rebuildBackdrop() {
+    /// 底图生成包含一次缩采样和 Core Image 渲染，移出主线程后换图可以先提交原图。
+    private func rebuildBackdropInBackground() {
+        backdropGeneration &+= 1
+        let generation = backdropGeneration
+        backdropTask?.cancel()
+
         guard let image else {
             backdropImage = nil
+            backdropLayer.contents = nil
+            backdropLayer.isHidden = true
             return
         }
-        backdropImage = Self.makeBackdrop(from: image.cgImage)
+
+        backdropTask = Task.detached(priority: .userInitiated) { [weak self, image] in
+            let backdrop = Self.makeBackdrop(from: image.cgImage)
+            guard !Task.isCancelled else { return }
+            await self?.applyBackdrop(backdrop, generation: generation)
+        }
+    }
+
+    private func applyBackdrop(_ backdrop: CGImage?, generation: UInt64) {
+        guard generation == backdropGeneration else { return }
+        backdropImage = backdrop
+        backdropLayer.contents = backdrop
+        backdropLayer.isHidden = backdrop == nil
+        updateLayerGeometry()
     }
 
     /// 换图或换帧时把内容塞进图层，随后只更新几何。
@@ -678,5 +705,9 @@ final class ImageCanvasView: NSView {
                 self?.advanceAnimationFrame()
             }
         }
+    }
+
+    deinit {
+        backdropTask?.cancel()
     }
 }

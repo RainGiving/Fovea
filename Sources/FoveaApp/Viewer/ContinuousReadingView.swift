@@ -21,6 +21,7 @@ final class ContinuousReadingView: NSView {
     private let backdropLayer = CALayer()
     private var backdropImage: CGImage?
     private var backdropSourceID: ImageItem.ID?
+    private var backdropTask: Task<Void, Never>?
     private var currentItemID: ImageItem.ID?
     private var focusUpdateTimer: Timer?
     private var isApplyingPages = false
@@ -92,7 +93,18 @@ final class ContinuousReadingView: NSView {
         guard let page, let image = page.image else { return }
         guard page.item.id != backdropSourceID else { return }
         backdropSourceID = page.item.id
-        backdropImage = ImageCanvasView.makeBackdrop(from: image.cgImage)
+        backdropTask?.cancel()
+        let sourceID = page.item.id
+        backdropTask = Task.detached(priority: .utility) { [weak self, image] in
+            let backdrop = ImageCanvasView.makeBackdrop(from: image.cgImage)
+            guard !Task.isCancelled else { return }
+            await self?.applyBackdrop(backdrop, sourceID: sourceID)
+        }
+    }
+
+    private func applyBackdrop(_ backdrop: CGImage?, sourceID: ImageItem.ID) {
+        guard sourceID == backdropSourceID else { return }
+        backdropImage = backdrop
         backdropLayer.contents = backdropImage
         backdropLayer.isHidden = backdropImage == nil
         updateBackdropGeometry()
@@ -165,6 +177,10 @@ final class ContinuousReadingView: NSView {
               focusedID != currentItemID else { return }
         currentItemID = focusedID
         onFocusedItemChanged?(focusedID)
+    }
+
+    deinit {
+        backdropTask?.cancel()
     }
 }
 

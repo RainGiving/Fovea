@@ -514,8 +514,7 @@ final class ViewerViewModelTests: XCTestCase {
         )
 
         await viewModel.open(url: firstURL)
-        let firstItem = try XCTUnwrap(viewModel.navigationState?.currentItem)
-        viewModel.show(item: firstItem)
+        let staleOpen = Task { await viewModel.open(url: firstURL) }
         await fullLoader.waitUntilPaused(id: "stale-display")
 
         viewModel.showNext()
@@ -524,7 +523,7 @@ final class ViewerViewModelTests: XCTestCase {
 
         try await fullLoader.resume(id: "stale-display")
         await fullLoader.waitUntilCompleted(id: "stale-display")
-        await Task.yield()
+        _ = await staleOpen.value
 
         XCTAssertEqual(viewModel.navigationState?.currentItem?.url, firstURL)
         XCTAssertEqual(viewModel.currentImage?.pixelSize, latestFirst.pixelSize)
@@ -737,6 +736,61 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.currentFilename, "first.png")
     }
 
+    func testNavigationShowsPreviewWhileTheFullImageIsStillLoading() async throws {
+        let firstURL = URL(fileURLWithPath: "/tmp/navigation-preview-first.raw")
+        let secondURL = URL(fileURLWithPath: "/tmp/navigation-preview-second.raw")
+        let first = try makeDecodedImage(width: 40, height: 30)
+        let secondPreview = try makeDecodedImage(width: 16, height: 12)
+        let secondFull = try makeDecodedImage(width: 60, height: 45)
+        let fullLoader = ControlledImageLoader(images: [firstURL: first, secondURL: secondFull])
+        let previewLoader = ControlledImageLoader(images: [firstURL: first, secondURL: secondPreview])
+        let viewModel = ViewerViewModel(
+            scanContainingDirectory: { _ in [
+                ImageItem(url: firstURL, format: .rawPhoto),
+                ImageItem(url: secondURL, format: .rawPhoto)
+            ] },
+            loadImageAtURL: fullLoader.load(url:format:),
+            loadPreviewAtURL: previewLoader.load(url:format:)
+        )
+        await viewModel.open(url: firstURL)
+        await fullLoader.pauseNextLoad(for: secondURL)
+
+        XCTAssertTrue(viewModel.showNext())
+        await fullLoader.waitUntilPaused(url: secondURL)
+        await waitUntil { viewModel.currentImage?.pixelSize == secondPreview.pixelSize }
+
+        XCTAssertEqual(viewModel.loadPhase, .preview)
+        XCTAssertNil(viewModel.currentMetadata)
+
+        try await fullLoader.resume(url: secondURL)
+        await waitUntil { viewModel.loadPhase == .full }
+        XCTAssertEqual(viewModel.currentImage?.pixelSize, secondFull.pixelSize)
+        XCTAssertEqual(viewModel.currentMetadata?.pixelWidth, 60)
+    }
+
+    func testNavigationAtSequenceBoundaryDoesNotReloadTheCurrentImage() async throws {
+        let url = URL(fileURLWithPath: "/tmp/navigation-boundary.raw")
+        let image = try makeDecodedImage(width: 40, height: 30)
+        let fullLoader = ControlledImageLoader(images: [url: image])
+        let viewModel = ViewerViewModel(
+            scanContainingDirectory: { _ in [ImageItem(url: url, format: .rawPhoto)] },
+            loadImageAtURL: fullLoader.load(url:format:),
+            loadPreviewAtURL: { _, _ in image }
+        )
+        await viewModel.open(url: url)
+        let item = try XCTUnwrap(viewModel.navigationState?.currentItem)
+
+        XCTAssertFalse(viewModel.showPrevious())
+        XCTAssertFalse(viewModel.showNext())
+        XCTAssertFalse(viewModel.show(item: item))
+        await Task.yield()
+
+        let loadCount = await fullLoader.loadCount(for: url)
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertEqual(viewModel.loadPhase, .full)
+        XCTAssertEqual(viewModel.currentImage?.pixelSize, image.pixelSize)
+    }
+
     func testNavigationDecodeFailurePublishesRecoverableErrorInsteadOfStayingLoading() async throws {
         let firstURL = URL(fileURLWithPath: "/tmp/navigation-1-good.png")
         let brokenURL = URL(fileURLWithPath: "/tmp/navigation-2-broken.png")
@@ -755,7 +809,7 @@ final class ViewerViewModelTests: XCTestCase {
         await viewModel.open(url: firstURL)
 
         viewModel.showNext()
-        await waitUntil { viewModel.loadPhase != .loading }
+        await waitUntil { viewModel.loadPhase == .failed }
 
         XCTAssertEqual(viewModel.navigationState?.currentItem?.url, brokenURL)
         XCTAssertEqual(viewModel.loadPhase, .failed)

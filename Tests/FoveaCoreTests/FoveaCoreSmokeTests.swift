@@ -3,6 +3,6 @@ import XCTest
 
 final class FoveaCoreSmokeTests: XCTestCase {
     func testCoreVersionIsAvailable() {
-        XCTAssertEqual(FoveaCoreVersion.current, "0.1.0")
+        XCTAssertEqual(FoveaCoreVersion.current, "0.1.1")
     }
 }

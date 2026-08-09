@@ -490,7 +490,7 @@ final class FilmstripView: NSScrollView {
     }
 
     /// 换图时胶卷条滑到新位置用的时长。和翻页的推入过渡取同一档，两边的节奏才对得上。
-    static let recenterDuration: TimeInterval = 0.24
+    static let recenterDuration: TimeInterval = 0.16
 
     /// 解不出来的图给一个占位符号，空着一格看起来像是加载卡住了。
     private static var thumbnailFallbackImage: NSImage? {
