@@ -191,7 +191,10 @@ final class ViewerViewModelTests: XCTestCase {
 
         await viewModel.open(url: brokenURL)
 
-        XCTAssertEqual(viewModel.errorMessage, "图片损坏或无法解码：broken.png")
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(format: AppStrings.text("viewer.error.decodeFailed"), brokenURL.lastPathComponent)
+        )
         XCTAssertNil(viewModel.currentImage)
         XCTAssertNil(viewModel.currentMetadata)
     }
@@ -208,7 +211,10 @@ final class ViewerViewModelTests: XCTestCase {
 
         await viewModel.open(url: unsupportedURL)
 
-        XCTAssertEqual(viewModel.errorMessage, "不支持的图片格式：txt")
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(format: AppStrings.text("viewer.error.unsupportedFormat"), unsupportedURL.pathExtension)
+        )
         XCTAssertNil(viewModel.currentImage)
         XCTAssertNil(viewModel.currentMetadata)
         XCTAssertNil(viewModel.navigationState)
@@ -273,7 +279,10 @@ final class ViewerViewModelTests: XCTestCase {
 
         await viewModel.open(url: brokenURL)
 
-        XCTAssertEqual(viewModel.errorMessage, "图片损坏或无法解码：broken.png")
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(format: AppStrings.text("viewer.error.decodeFailed"), brokenURL.lastPathComponent)
+        )
         XCTAssertNil(viewModel.currentImage)
         XCTAssertNil(viewModel.currentMetadata)
         XCTAssertNil(viewModel.navigationState)
@@ -752,7 +761,10 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.loadPhase, .failed)
         XCTAssertNil(viewModel.currentImage)
         XCTAssertNil(viewModel.currentMetadata)
-        XCTAssertEqual(viewModel.errorMessage, "图片损坏或无法解码：navigation-2-broken.png")
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(format: AppStrings.text("viewer.error.decodeFailed"), brokenURL.lastPathComponent)
+        )
     }
 
     func testSuccessfulNavigationClearsEarlierDecodeFailure() async throws {
@@ -819,7 +831,10 @@ final class ViewerViewModelTests: XCTestCase {
 
         await viewModel.open(url: imageURL)
         viewModel.renameCurrent(to: "   ")
-        XCTAssertEqual(viewModel.errorMessage, "无法重命名：start.png")
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(format: AppStrings.text("viewer.error.renameFailed"), imageURL.lastPathComponent)
+        )
 
         viewModel.renameCurrent(to: "renamed")
 
@@ -941,7 +956,10 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.navigationState?.currentItem?.url, nextURL)
         await waitUntil { viewModel.currentImage?.pixelSize == CGSize(width: 7, height: 5) }
         XCTAssertEqual(viewModel.currentImage?.pixelSize, CGSize(width: 7, height: 5))
-        XCTAssertEqual(viewModel.errorMessage, "文件已在外部移除：a.png")
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(format: AppStrings.text("viewer.error.externallyRemoved"), deletedURL.lastPathComponent)
+        )
     }
 
     func testRefreshPreservesUnsavedEditsWhenCurrentFileWasDeletedExternally() async throws {
@@ -1018,7 +1036,10 @@ final class ViewerViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.navigationState?.currentItem?.url, firstURL)
         XCTAssertEqual(viewModel.currentImage?.pixelSize, CGSize(width: 4, height: 3))
-        XCTAssertEqual(viewModel.errorMessage, "图片已在外部修改且无法解码：a.png")
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(format: AppStrings.text("viewer.error.externallyModifiedDecodeFailed"), firstURL.lastPathComponent)
+        )
 
         viewModel.showNext()
         await waitUntil { viewModel.navigationState?.currentItem?.url == secondURL }
@@ -1043,7 +1064,10 @@ final class ViewerViewModelTests: XCTestCase {
 
         XCTAssertTrue(viewModel.hasUnsavedEdits)
         XCTAssertEqual(viewModel.currentImage?.pixelSize, CGSize(width: 3, height: 4))
-        XCTAssertEqual(viewModel.errorMessage, "图片已在外部修改：edited.png")
+        XCTAssertEqual(
+            viewModel.errorMessage,
+            String(format: AppStrings.text("viewer.error.externallyModified"), url.lastPathComponent)
+        )
     }
 
     func testApplyEditMarksUnsavedAndUpdatesImageSize() async throws {
@@ -1233,7 +1257,7 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.saveCurrentEdits())
 
         XCTAssertTrue(viewModel.hasUnsavedEdits)
-        XCTAssertEqual(viewModel.errorMessage, "无法保存该格式的编辑结果")
+        XCTAssertEqual(viewModel.errorMessage, AppStrings.text("viewer.error.saveFailed"))
     }
 
     func testDiscardCurrentEditsRestoresOriginalImageAndClearsUnsavedState() async throws {
