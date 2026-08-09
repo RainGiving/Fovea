@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the tag version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="$(make --no-print-directory version)"
+          test "$TAG_VERSION" = "$VERSION"
+      - name: Run checks
+        run: make check
+      - name: Create disk image
+        run: make dmg
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(make --no-print-directory version)"
+          ARTIFACT=".build/artifacts/Fovea-$VERSION.dmg"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ARTIFACT" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$ARTIFACT" --title "Fovea $VERSION" --generate-notes
+          fi

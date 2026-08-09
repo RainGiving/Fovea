@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run checks
+        run: make check
+      - name: Build release disk image
+        run: make dmg
+      - name: Upload disk image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fovea-macos-arm64
+          path: .build/artifacts/Fovea-*.dmg
+          if-no-files-found: error

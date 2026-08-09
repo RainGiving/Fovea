@@ -1,70 +1,66 @@
-# ImageView
+# Fovea
 
-ImageView 是一款原生 macOS 图片浏览器，面向快速打开、同目录连续浏览和触控板优先操作。它可作为常用图片格式的默认打开应用。
+Fovea 是原生 macOS 图片浏览器，围绕快速打开、同目录连续浏览和触控板操作设计。它支持常用图片格式，可在设置中设为默认打开应用。
 
-## 当前功能
+<p align="center">
+  <img src="docs/assets/screenshots/fovea-welcome.png" alt="Fovea 中文欢迎页，提供打开图片和浏览文件夹操作" width="720">
+</p>
 
-- 支持 JPEG、PNG、GIF、TIFF、BMP、HEIC、HEIF、WebP、AVIF 和 SVG。
-- 从 Finder、拖放、最近项目或“打开”菜单载入图片；同目录自然排序浏览。
-- 同时打开多个独立图片窗口；首张图片复用启动空窗口，关闭最后一个图片窗口自动退出应用。
-- 键盘、菜单、页边控制和触控板横向滑动切换图片；放大时保留平移行为。
-- 双指缩放、拖拽平移、适应窗口、适应宽度、实际大小、预设/自定义倍率和全屏浏览。
-- 连续纵向阅读同目录图片，并可设置从左到右或从右到左的翻页方向。
-- 自动隐藏的 HUD、胶片栏与页边控制；胶片栏选中缩略图始终居中。
-- 标题栏“更多”菜单、一次性使用提示和可搜索帮助，让常用操作保持可见且易于查找。
-- 旋转、镜像、自由裁剪、20 步撤销/重做、保存、另存为和未保存编辑确认。
-- 重命名、移到废纸篓、在 Finder 中显示、复制路径，以及外部文件变更检测。
-- 文件夹浏览模式支持搜索、格式过滤、排序、多选，以及批量移到废纸篓、移动和重命名。
-- 批量任务提供逐项进度、取消、失败详情和安全冲突处理；可靠的移动与重命名操作支持一次性撤销。
-- 可浮动或停靠的信息面板展示文件、尺寸、颜色和常用 EXIF 元数据，并支持复制字段和在 Finder 中显示。
-- 最近项目、深色/浅色/跟随系统外观、动画开关，以及跟随系统“减少动态效果”的无障碍体验。
-- 设置窗口可一键将选中的常用图片格式设为由 ImageView 默认打开。
+## 功能
 
-## 系统要求
+- 支持 JPEG、PNG、GIF、TIFF、BMP、HEIC、HEIF、WebP、AVIF、SVG，以及多种 RAW 和专业图像格式。
+- 从 Finder、拖放、最近项目或“打开”菜单载入图片，按自然排序浏览同一目录内容。
+- 通过键盘、页边控制和触控板横向滑动切换图片，支持缩放、平移、全屏和连续纵向浏览。
+- 提供自动隐藏的胶片栏、信息面板、使用提示、搜索式帮助，以及浅色、深色和跟随系统外观。
+- 提供旋转、镜像、自由裁剪、撤销/重做、保存、另存为、重命名、移到废纸篓和在 Finder 中显示。
+- 文件夹浏览支持搜索、格式过滤、排序、多选与批量移动、重命名、移到废纸篓，并提供进度、取消和一次性撤销。
 
-- macOS 26.0 或更高版本。
-- 从源码构建需要 Swift 6 工具链。
+## 安装
 
-## 开发
+当前发布包面向 Apple Silicon，要求 macOS 26 或更高版本。
 
 ```bash
-swift test --disable-sandbox
-swift run ImageView
+brew tap RainGiving/tap
+brew install --cask fovea
 ```
 
-## 构建应用包
+更新：
 
 ```bash
-scripts/build-app.sh
-open .build/ImageView.app
+brew upgrade --cask fovea
 ```
 
-构建产物为 `.build/ImageView.app`。应用包声明了上述图片类型，macOS 可将其作为候选默认图片查看器。
+也可从 [GitHub Releases](https://github.com/RainGiving/Fovea/releases) 下载 `Fovea-X.Y.Z.dmg`，将 `Fovea.app` 拖到“应用程序”。
 
-## 安装到本机
+## 从源码构建
+
+需要 macOS 26 SDK 和 Swift 6.2 或更高版本。
 
 ```bash
-scripts/install-app.sh
+make check
+make build
+open .build/Fovea.app
 ```
 
-脚本会重新构建并安装到 `/Applications/ImageView.app`，然后启动已安装版本。
-
-## 性能基准
+常用命令：
 
 ```bash
-scripts/run-memory-benchmarks.sh
+make test      # 运行测试
+make audit     # 运行项目审计
+make check     # 测试和审计
+make dmg       # 生成 .build/artifacts/Fovea-X.Y.Z.dmg
+make install   # 安装到 /Applications/Fovea.app
+make clean     # 清理 .build
 ```
 
-脚本会生成小图、大图、动图和千图目录四类测试素材，构建应用并将内存基准写入 `docs/assets/performance/`。
+`CFBundleShortVersionString` 是发布版本来源，`make version` 会输出当前版本。提交版本更新到 `main` 后，运行 `make release` 创建并推送对应的 `vX.Y.Z` 标签。GitHub Actions 会复跑检查、生成同名 DMG，并发布到 GitHub Releases。
 
-## 文档
+## 名称迁移
 
-- [产品需求文档](docs/superpowers/specs/2026-07-09-imageview-prd.md)
-- [默认应用关联设计](docs/superpowers/specs/2026-07-11-default-image-app-settings-design.md)
-- [多图片窗口设计](docs/superpowers/specs/2026-07-11-multiple-image-windows-design.md)
-- [辅助功能发布检查](docs/qa/2026-07-15-accessibility-validation.md)
-- [内存基准示例](docs/assets/performance/memory-baseline-2026-07-15-113013.md)
+Fovea 是 ImageView 的后续名称。应用包路径为 `/Applications/Fovea.app`，Bundle Identifier 为 `io.github.raingiving.fovea`。安装后可在“设置 → 文件关联”中将 Fovea 设为图片默认打开应用。
 
-## 开源许可
+`docs/superpowers/`、`docs/qa/` 和历史性能记录保留了 ImageView 名称，用于保存当时的设计和验证上下文。
 
-本项目基于 [MIT License](LICENSE) 开源。
+## 许可
+
+[MIT License](LICENSE)

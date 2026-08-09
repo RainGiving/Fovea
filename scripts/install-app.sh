@@ -2,13 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SOURCE_APP="$ROOT_DIR/.build/ImageView.app"
-DESTINATION_APP="/Applications/ImageView.app"
+SOURCE_APP="$ROOT_DIR/.build/Fovea.app"
+DESTINATION_APP="/Applications/Fovea.app"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 "$ROOT_DIR/scripts/build-app.sh"
 
-pkill -x ImageView 2>/dev/null || true
+pkill -x Fovea 2>/dev/null || true
 rm -rf "$DESTINATION_APP"
 ditto "$SOURCE_APP" "$DESTINATION_APP"
 

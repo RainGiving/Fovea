@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-FIXTURE_DIR="${TMPDIR:-/tmp}/imageview-memory-fixtures"
+FIXTURE_DIR="${TMPDIR:-/tmp}/fovea-memory-fixtures"
 RESULT_DIR="$ROOT_DIR/docs/assets/performance"
 RESULT_FILE="$RESULT_DIR/memory-baseline-$(date +%Y-%m-%d-%H%M%S).md"
-APP="$ROOT_DIR/.build/ImageView.app"
-EXECUTABLE="$APP/Contents/MacOS/ImageView"
+APP="$ROOT_DIR/.build/Fovea.app"
+EXECUTABLE="$APP/Contents/MacOS/Fovea"
 
 mkdir -p "$RESULT_DIR"
 swift "$ROOT_DIR/scripts/generate-memory-fixtures.swift" "$FIXTURE_DIR" >/dev/null
@@ -27,7 +27,7 @@ measure() {
         kill -0 "$pid" 2>/dev/null && break
         sleep 0.1
     done
-    kill -0 "$pid" 2>/dev/null || { echo "Could not start ImageView process" >&2; return 1; }
+    kill -0 "$pid" 2>/dev/null || { echo "Could not start Fovea process" >&2; return 1; }
 
     local peak=0
     local ending=0
@@ -55,7 +55,7 @@ measure() {
 }
 
 {
-    echo "# ImageView memory baseline"
+    echo "# Fovea memory baseline"
     echo
     echo "- Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
     echo "- macOS: $(sw_vers -productVersion)"

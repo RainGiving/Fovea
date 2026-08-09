@@ -1,0 +1,1306 @@
+{
+  "entries": [
+    {
+      "path": ".github",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains GitHub Actions configuration."
+    },
+    {
+      "path": ".github/workflows",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains GitHub Actions workflows."
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Builds and validates pull requests and main branch changes."
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Builds and publishes tagged GitHub releases."
+    },
+    {
+      "path": ".gitignore",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Excludes local build and editor output from version control."
+    },
+    {
+      "path": "LICENSE",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Defines the project license."
+    },
+    {
+      "path": "Makefile",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Provides the standard development and release commands."
+    },
+    {
+      "path": "Package.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Defines the Swift package and build targets."
+    },
+    {
+      "path": "README.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Introduces Fovea and documents installation and development."
+    },
+    {
+      "path": "Sources",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains Fovea application and library source code."
+    },
+    {
+      "path": "Sources/FoveaApp",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains the macOS application target."
+    },
+    {
+      "path": "Sources/FoveaApp/AppDelegate.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Controls",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Controls/HoverToolbarButton.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Design",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Design/GlassMetrics.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Design/GlassPanelView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Design/Motion.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/FolderBrowser",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/FolderBrowser/BatchRenameSheetController.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/FolderBrowser/FolderBrowserCellView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/FolderBrowser/FolderBrowserView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/FolderBrowser/FolderBrowserViewModel.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/FolderBrowser/ThumbnailProvider.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Localization",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Localization/AppStrings.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/MainWindowController.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Resources",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Resources/Fovea.icns",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Resources/Info.plist",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Resources/en.lproj",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Resources/en.lproj/Localizable.strings",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Resources/zh-Hans.lproj",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Resources/zh-Hans.lproj/Localizable.strings",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Settings",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Settings/AppSettings.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Settings/ApplicationBundleResolver.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Settings/DefaultApplicationService.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Settings/FileAssociationSettingsModel.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Settings/PreferencesWindowController.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/ContinuousReadingView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/CropOverlayView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/EditControlsView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/EmptyStateView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/ErrorStateView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/FilmstripOverlayView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/FilmstripView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/GestureCoordinator.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/HelpWindowController.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/ImageCanvasView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/ImageContextMenuBuilder.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/InspectorView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/PageNavigationOverlayView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/RootInteractionView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/UsageHintView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/ViewerViewModel.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/Viewer/WindowPresentation.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaApp/main.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains the reusable image handling library."
+    },
+    {
+      "path": "Sources/FoveaCore/Decode",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Decode/ImageCache.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Decode/ImageDecodeExecutor.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Decode/ImageDecodeService.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Directory",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Directory/DirectoryScanner.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Directory/NaturalSort.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Editing",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Editing/CropAspectRatio.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Editing/EditOperation.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Editing/ImageEditingService.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Files",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Files/BatchFileOperationService.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Files/FileActions.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Files/SaveAsNaming.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Folder",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Folder/FolderFilter.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Folder/FolderSession.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Folder/FolderSortMode.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/FoveaCore.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Metadata",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Metadata/ImageMetadataService.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Models",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Models/CurrentFileVersion.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Models/ImageItem.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Models/ImageMetadata.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Models/SupportedImageFormat.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Navigation",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Sources/FoveaCore/Navigation/NavigationState.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
+      "path": "Tests",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains automated tests."
+    },
+    {
+      "path": "Tests/FoveaAppTests",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains application target tests."
+    },
+    {
+      "path": "Tests/FoveaAppTests/AppDelegateTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/AppSettingsTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/AppStringsTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ApplicationBundleResolverTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/BatchRenameSheetControllerTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ChromeMaterialTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ContinuousReadingViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/CropOverlayViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/DefaultApplicationServiceTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/EditControlsViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/EmptyStateViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ErrorStateViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/FileAssociationSettingsModelTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/FilmstripViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/FolderBrowserCellViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/FolderBrowserViewModelTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/FolderBrowserViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/GestureCoordinatorTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/HoverToolbarButtonTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ImageCanvasRenderingTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ImageCanvasViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ImageContextMenuBuilderTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/InspectorViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/MainWindowControllerTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/MotionTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/PageNavigationOverlayViewTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/PreferencesWindowControllerTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ThumbnailProviderTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/ViewerViewModelTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaAppTests/WindowPresentationTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains library target tests."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/BatchFileOperationServiceTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/CropAspectRatioTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/DirectoryScannerTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/EditOperationTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/FileActionsTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/FolderSessionTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/FoveaCoreSmokeTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/ImageCacheTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/ImageDecodeExecutorTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/ImageDecodeServiceTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/ImageEditingServiceTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/ImageMetadataServiceTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/NaturalSortTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/NavigationStateTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/PerformanceGuardTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/SaveAsNamingTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "Tests/FoveaCoreTests/SupportedImageFormatTests.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains automated test cases."
+    },
+    {
+      "path": "docs",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains maintained documentation and visual assets."
+    },
+    {
+      "path": "docs/assets",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains documentation assets."
+    },
+    {
+      "path": "docs/assets/performance",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/assets/performance/memory-baseline-2026-07-15-113013.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/assets/performance/memory-baseline-2026-07-15-145801.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/assets/product-audit-2026-07-15",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/assets/product-audit-2026-07-15/01-empty-state.png",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/assets/product-audit-2026-07-15/02-viewer.png",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/assets/product-audit-2026-07-15/03-folder-browser.png",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/assets/product-audit-2026-07-15/04-inspector.png",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/assets/screenshots",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains README screenshots."
+    },
+    {
+      "path": "docs/assets/screenshots/fovea-welcome.png",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Shows the Fovea welcome screen in the README."
+    },
+    {
+      "path": "docs/qa",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/qa/2026-07-15-accessibility-validation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-09-imageview-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-10-external-file-changes-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-10-freeform-crop-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-10-hud-auto-hide-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-10-image-tools-toolbar-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-10-native-menu-localization-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-10-progressive-image-rendering-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-10-save-as-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-app-icon-redesign.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-appearance-menu-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-centered-filmstrip-selection-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-default-image-app-settings-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-filmstrip-visibility-eligibility.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-floating-page-controls.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-imageview-empty-state.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-imageview-stability-hardening.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-larger-filmstrip-thumbnails.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-multiple-image-windows-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-status-bar-layout.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-11-unified-overlay-auto-hide.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-12-error-state-recovery.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-12-folder-browser-batch-organization-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-12-folder-browser-batch-safety-corrections.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-12-folder-browser-navigation-and-states-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-07-16-scroll-input-direction-implementation.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-09-imageview-prd.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-canvas-pan-bounds-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-external-file-changes-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-file-drop-open-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-freeform-crop-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-gif-playback-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-hud-auto-hide-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-image-tools-toolbar-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-native-menu-localization-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-progressive-image-rendering-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-recent-images-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-10-save-as-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-app-icon-redesign.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-appearance-menu-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-centered-filmstrip-selection-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-default-image-app-settings-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-filmstrip-visibility-eligibility-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-floating-page-controls-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-imageview-empty-state-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-imageview-stability-hardening-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-larger-filmstrip-thumbnails-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-multiple-image-windows-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-status-bar-layout-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-11-unified-overlay-auto-hide-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-12-error-state-recovery-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-12-folder-browser-batch-organization-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "docs/superpowers/specs/2026-07-12-folder-browser-navigation-and-states-design.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains historical design, quality, and performance records."
+    },
+    {
+      "path": "project-manifest.json",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Records the maintained source tree."
+    },
+    {
+      "path": "scripts",
+      "kind": "directory",
+      "state": "active",
+      "purpose": "Contains build, packaging, and maintenance scripts."
+    },
+    {
+      "path": "scripts/audit-baseline.txt",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Supports local build, packaging, or maintenance."
+    },
+    {
+      "path": "scripts/audit.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Supports local build, packaging, or maintenance."
+    },
+    {
+      "path": "scripts/build-app.sh",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Supports local build, packaging, or maintenance."
+    },
+    {
+      "path": "scripts/generate-memory-fixtures.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Supports local build, packaging, or maintenance."
+    },
+    {
+      "path": "scripts/install-app.sh",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Supports local build, packaging, or maintenance."
+    },
+    {
+      "path": "scripts/package-dmg.sh",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Supports local build, packaging, or maintenance."
+    },
+    {
+      "path": "scripts/run-memory-benchmarks.sh",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Supports local build, packaging, or maintenance."
+    }
+  ]
+}

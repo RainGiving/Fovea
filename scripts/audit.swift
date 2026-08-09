@@ -1,7 +1,7 @@
 #!/usr/bin/env swift
 import Foundation
 
-// ImageView 代码审计。
+// Fovea 代码审计。
 //
 // 用法：swift scripts/audit.swift [--strict]
 //
@@ -88,8 +88,8 @@ func stringsKeys(_ path: String) -> [String: Int] {
     return keys
 }
 
-let zhPath = "Sources/ImageViewApp/Resources/zh-Hans.lproj/Localizable.strings"
-let enPath = "Sources/ImageViewApp/Resources/en.lproj/Localizable.strings"
+let zhPath = "Sources/FoveaApp/Resources/zh-Hans.lproj/Localizable.strings"
+let enPath = "Sources/FoveaApp/Resources/en.lproj/Localizable.strings"
 let zh = stringsKeys(zhPath)
 let en = stringsKeys(enPath)
 
@@ -290,7 +290,7 @@ for path in sourceFiles {
 
 for path in sourceFiles {
     let file = relative(path)
-    guard file.hasPrefix("Sources/ImageViewCore/"), !file.hasSuffix("ImageViewCore.swift") else { continue }
+    guard file.hasPrefix("Sources/FoveaCore/"), !file.hasSuffix("FoveaCore.swift") else { continue }
     let type = (file as NSString).lastPathComponent.replacingOccurrences(of: ".swift", with: "")
     if !allTests.contains(type) {
         report(.info, "test.coverage", file, nil, "核心类型 \(type) 在测试里没有出现")
@@ -309,7 +309,7 @@ for legacy in ["bezelStyle = .rounded", "bezelStyle = .regularSquare"] where all
 // MARK: 输出
 
 let order: [Severity] = [.error, .warning, .info]
-print("ImageView 代码审计")
+print("Fovea 代码审计")
 print("扫描 \(sourceFiles.count) 个源文件，\(testFiles.count) 个测试文件\n")
 
 for severity in order {

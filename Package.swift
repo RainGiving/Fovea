@@ -2,24 +2,24 @@
 import PackageDescription
 
 let package = Package(
-    name: "ImageView",
+    name: "Fovea",
     defaultLocalization: "en",
     platforms: [.macOS(.v26)],
     products: [
-        .library(name: "ImageViewCore", targets: ["ImageViewCore"]),
-        .executable(name: "ImageView", targets: ["ImageViewApp"])
+        .library(name: "FoveaCore", targets: ["FoveaCore"]),
+        .executable(name: "Fovea", targets: ["FoveaApp"])
     ],
     targets: [
         .target(
-            name: "ImageViewCore",
-            path: "Sources/ImageViewCore"
+            name: "FoveaCore",
+            path: "Sources/FoveaCore"
         ),
         .executableTarget(
-            name: "ImageViewApp",
-            dependencies: ["ImageViewCore"],
-            path: "Sources/ImageViewApp",
+            name: "FoveaApp",
+            dependencies: ["FoveaCore"],
+            path: "Sources/FoveaApp",
             exclude: [
-                "Resources/ImageView.icns",
+                "Resources/Fovea.icns",
                 "Resources/Info.plist"
             ],
             resources: [
@@ -28,14 +28,14 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "ImageViewCoreTests",
-            dependencies: ["ImageViewCore"],
-            path: "Tests/ImageViewCoreTests"
+            name: "FoveaCoreTests",
+            dependencies: ["FoveaCore"],
+            path: "Tests/FoveaCoreTests"
         ),
         .testTarget(
-            name: "ImageViewAppTests",
-            dependencies: ["ImageViewApp", "ImageViewCore"],
-            path: "Tests/ImageViewAppTests"
+            name: "FoveaAppTests",
+            dependencies: ["FoveaApp", "FoveaCore"],
+            path: "Tests/FoveaAppTests"
         )
     ]
 )

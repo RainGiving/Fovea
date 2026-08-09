@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 enum FixtureError: Error { case cannotCreateImage, cannotCreateDestination, cannotFinalize }
 
-let output = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "/tmp/imageview-memory-fixtures", isDirectory: true)
+let output = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "/tmp/fovea-memory-fixtures", isDirectory: true)
 let manager = FileManager.default
 try? manager.removeItem(at: output)
 try manager.createDirectory(at: output, withIntermediateDirectories: true)

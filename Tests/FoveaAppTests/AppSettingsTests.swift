@@ -1,0 +1,61 @@
+import XCTest
+@testable import FoveaApp
+
+@MainActor
+final class AppSettingsTests: XCTestCase {
+    func testDefaultsFavorPreviewLikeSafetyAndHiddenFilmstrip() {
+        let defaults = makeIsolatedDefaults()
+        let settings = AppSettings(defaults: defaults)
+
+        XCTAssertFalse(settings.showsFilmstrip)
+        XCTAssertFalse(settings.showsInspector)
+        XCTAssertTrue(settings.confirmsDelete)
+        XCTAssertTrue(settings.animatesNavigationTransitions)
+        XCTAssertEqual(settings.readingDirection, .leftToRight)
+        XCTAssertFalse(settings.usesContinuousReading)
+    }
+
+    func testSettingsPersistAcrossInstances() {
+        let defaults = makeIsolatedDefaults()
+        let first = AppSettings(defaults: defaults)
+        first.showsFilmstrip = true
+        first.showsInspector = true
+        first.confirmsDelete = false
+        first.animatesNavigationTransitions = false
+        first.readingDirection = .rightToLeft
+        first.usesContinuousReading = true
+
+        let second = AppSettings(defaults: defaults)
+        XCTAssertTrue(second.showsFilmstrip)
+        XCTAssertTrue(second.showsInspector)
+        XCTAssertFalse(second.confirmsDelete)
+        XCTAssertFalse(second.animatesNavigationTransitions)
+        XCTAssertEqual(second.readingDirection, .rightToLeft)
+        XCTAssertTrue(second.usesContinuousReading)
+    }
+
+    func testAppearanceDefaultsToSystem() {
+        XCTAssertEqual(AppSettings(defaults: makeIsolatedDefaults()).appearance, .system)
+    }
+
+    func testAppearancePersistsAcrossInstances() {
+        let defaults = makeIsolatedDefaults()
+        AppSettings(defaults: defaults).appearance = .dark
+
+        XCTAssertEqual(AppSettings(defaults: defaults).appearance, .dark)
+    }
+
+    func testUnknownAppearanceFallsBackToSystem() {
+        let defaults = makeIsolatedDefaults()
+        defaults.set("sepia", forKey: "appearance")
+
+        XCTAssertEqual(AppSettings(defaults: defaults).appearance, .system)
+    }
+
+    private func makeIsolatedDefaults() -> UserDefaults {
+        let suiteName = "FoveaAppTests.AppSettings.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+}
