@@ -53,7 +53,15 @@ make install   # 安装到 /Applications/Fovea.app
 make clean     # 清理 .build
 ```
 
-`CFBundleShortVersionString` 是发布版本来源，`make version` 会输出当前版本。提交版本更新到 `main` 后，运行 `make release` 创建并推送对应的 `vX.Y.Z` 标签。GitHub Actions 会复跑检查、生成同名 DMG，并发布到 GitHub Releases。
+`CFBundleShortVersionString` 是发布版本来源，`make version` 会输出当前版本。三个项目使用相同的发布流程：
+
+```bash
+make release VERSION=X.Y.Z
+git tag vX.Y.Z
+git push origin main --follow-tags
+```
+
+GitHub Actions 会检查标签与版本号，重新运行检查，生成同名 DMG，并发布到 GitHub Releases。
 
 ## 名称迁移
 

@@ -1,6 +1,7 @@
 APP_NAME := Fovea
 PLIST := Sources/FoveaApp/Resources/Info.plist
-VERSION := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' $(PLIST))
+DECLARED_VERSION := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' $(PLIST))
+VERSION ?= $(DECLARED_VERSION)
 
 .PHONY: build test audit check dmg install clean version release
 
@@ -27,8 +28,6 @@ clean:
 version:
 	@echo $(VERSION)
 
-release: check dmg
-	@test -z "$(shell git status --porcelain)" || (echo "Commit or discard local changes before creating a release." >&2; exit 1)
-	@if git rev-parse --verify --quiet "refs/tags/v$(VERSION)" >/dev/null; then echo "Tag v$(VERSION) already exists." >&2; exit 1; fi
-	git tag -a "v$(VERSION)" -m "$(APP_NAME) $(VERSION)"
-	git push origin "v$(VERSION)"
+release: check
+	@test "$(VERSION)" = "$(DECLARED_VERSION)" || { echo "$(PLIST) declares $(DECLARED_VERSION). Update it before packaging $(VERSION)." >&2; exit 1; }
+	$(MAKE) dmg
