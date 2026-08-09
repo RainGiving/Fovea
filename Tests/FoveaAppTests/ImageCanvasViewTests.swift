@@ -5,6 +5,15 @@ import FoveaCore
 
 @MainActor
 final class ImageCanvasViewTests: XCTestCase {
+    func testNavigationDriftIsShortAndDirectionallySymmetric() {
+        XCTAssertEqual(
+            ImageCanvasView.NavigationDirection.forward.incomingOffset,
+            -ImageCanvasView.NavigationDirection.backward.incomingOffset
+        )
+        XCTAssertLessThanOrEqual(abs(ImageCanvasView.NavigationDirection.forward.incomingOffset), 16)
+        XCTAssertGreaterThan(ImageCanvasView.navigationTransitionDuration, 0.18)
+    }
+
     func testBackdropKeepsTheSourceAspectRatioAndBroadLightDarkStructure() throws {
         let context = CGContext(
             data: nil,

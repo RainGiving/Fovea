@@ -949,23 +949,6 @@ final class MainWindowControllerTests: XCTestCase {
         ))
     }
 
-    /// 浮动的信息栏点到别处就收起来，点在它自己身上或那颗开关上不收。
-    func testFloatingInspectorDismissesOnlyOnClicksElsewhere() {
-        XCTAssertTrue(MainWindowController.shouldDismissFloatingInspector(
-            hitViewIsInsideInspector: false,
-            hitViewIsTheInspectorToggle: false
-        ))
-        XCTAssertFalse(MainWindowController.shouldDismissFloatingInspector(
-            hitViewIsInsideInspector: true,
-            hitViewIsTheInspectorToggle: false
-        ))
-        // 开关自己要放过去，否则这里先关掉、开关再打开，按下去像没反应。
-        XCTAssertFalse(MainWindowController.shouldDismissFloatingInspector(
-            hitViewIsInsideInspector: false,
-            hitViewIsTheInspectorToggle: true
-        ))
-    }
-
     func testPageControlsRequireMultipleImagesAndNoCropSession() {
         XCTAssertFalse(MainWindowController.shouldDisplayPageControls(itemCount: 0, isCropping: false))
         XCTAssertFalse(MainWindowController.shouldDisplayPageControls(itemCount: 1, isCropping: false))

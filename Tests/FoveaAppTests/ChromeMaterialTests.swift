@@ -3,7 +3,7 @@ import FoveaCore
 import XCTest
 @testable import FoveaApp
 
-/// 窗口 chrome 的材质与信息栏的摆法。
+/// 窗口 chrome 的材质与信息栏布局。
 @MainActor
 final class ChromeMaterialTests: XCTestCase {
     /// 上下边栏只在环境底图上加渐变染色，不再形成两块独立玻璃。
@@ -14,22 +14,12 @@ final class ChromeMaterialTests: XCTestCase {
         XCTAssertTrue(controller.bottomBarViewForTesting is AmbientChromeView)
     }
 
-    /// 信息栏无论停靠与否都是圆角。以前停靠时改成直角贴边，
-    /// 直角和窗口自己的圆角对不齐，边上会露出底下那条直边。
-    func testInspectorKeepsItsRoundedCornerWhenDocked() {
-        XCTAssertEqual(
-            InspectorView(metadata: nil, isDocked: true).cornerRadius,
-            GlassMetrics.panelCornerRadius
-        )
-        XCTAssertEqual(
-            InspectorView(metadata: nil, isDocked: false).cornerRadius,
-            GlassMetrics.panelCornerRadius
-        )
+    func testInspectorSidebarUsesTheSharedPanelCornerRadius() {
+        XCTAssertEqual(InspectorView(metadata: nil).cornerRadius, GlassMetrics.panelCornerRadius)
     }
 
-    /// 停靠时让出的是图片的位置，画布本身仍然铺满整窗，
-    /// 模糊底才连成一片，浮起的玻璃底下也才有东西可以折射。
-    func testDockedInspectorReservesRoomThroughContentInsetsNotByShrinkingTheCanvas() async throws {
+    /// 信息栏始终是侧栏。图片通过内边距让位，环境底图仍铺满整窗。
+    func testInspectorAlwaysReservesSidebarThroughContentInsets() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -47,13 +37,6 @@ final class ChromeMaterialTests: XCTestCase {
         window.contentView?.layoutSubtreeIfNeeded()
         let rootWidth = try XCTUnwrap(window.contentView).bounds.width
 
-        XCTAssertFalse(controller.isInspectorDockedForTesting, "默认是浮动的")
-        XCTAssertEqual(controller.reservedInspectorWidthForTesting, 0)
-
-        controller.toggleInspectorDockForTesting()
-        window.contentView?.layoutSubtreeIfNeeded()
-
-        XCTAssertTrue(controller.isInspectorDockedForTesting)
         XCTAssertEqual(
             controller.reservedInspectorWidthForTesting,
             GlassMetrics.inspectorWidth + GlassMetrics.floatingInset * 2,
@@ -108,8 +91,8 @@ final class ChromeMaterialTests: XCTestCase {
         XCTAssertFalse(controller.isFilmstripVisibleForTesting, "只有关掉开关才收起来")
     }
 
-    /// 胶片区域已经进入下边栏，信息栏停靠时不需要横向跳动。
-    func testDockedInspectorDoesNotMoveOrCoverTheFilmstrip() async throws {
+    /// 胶片区域进入下边栏后，需要给右侧信息栏留出完整空间。
+    func testInspectorSidebarDoesNotCoverTheFilmstrip() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -126,22 +109,17 @@ final class ChromeMaterialTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         window.contentView?.layoutSubtreeIfNeeded()
-        let floatingFrame = controller.filmstripOverlayFrameForTesting
-
-        controller.toggleInspectorDockForTesting()
-        window.contentView?.layoutSubtreeIfNeeded()
-        let dockedFrame = controller.filmstripOverlayFrameForTesting
+        let filmstripFrame = controller.filmstripOverlayFrameForTesting
         let inspectorFrame = controller.inspectorFrameForTesting
 
         XCTAssertFalse(
-            dockedFrame.intersects(inspectorFrame),
-            "胶卷条 \\(dockedFrame) 不该压进信息栏 \\(inspectorFrame)"
+            filmstripFrame.intersects(inspectorFrame),
+            "胶卷条 \\(filmstripFrame) 不该压进信息栏 \\(inspectorFrame)"
         )
-        XCTAssertEqual(dockedFrame, floatingFrame)
     }
 
-    /// 右边那颗翻页按钮同样要让开停靠的信息栏。
-    func testNextPageButtonStepsAsideForTheDockedInspector() async throws {
+    /// 右边的翻页按钮同样要让开信息栏。
+    func testNextPageButtonStepsAsideForTheInspectorSidebar() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -157,24 +135,18 @@ final class ChromeMaterialTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         window.contentView?.layoutSubtreeIfNeeded()
-        let floatingFrame = controller.nextPageButtonFrameForTesting
-
-        controller.toggleInspectorDockForTesting()
-        window.contentView?.layoutSubtreeIfNeeded()
-        let dockedFrame = controller.nextPageButtonFrameForTesting
+        let buttonFrame = controller.nextPageButtonFrameForTesting
+        let inspectorFrame = controller.inspectorFrameForTesting
 
         XCTAssertFalse(
-            dockedFrame.intersects(controller.inspectorFrameForTesting),
-            "翻页按钮 \\(dockedFrame) 不该压进信息栏 \\(controller.inspectorFrameForTesting)"
+            buttonFrame.intersects(inspectorFrame),
+            "翻页按钮 \\(buttonFrame) 不该压进信息栏 \\(inspectorFrame)"
         )
-        XCTAssertLessThan(dockedFrame.maxX, floatingFrame.maxX, "右沿要往左收")
+        XCTAssertLessThan(buttonFrame.maxX, inspectorFrame.minX, "翻页按钮要完整留在信息栏左侧")
     }
 
-    /// 胶卷条的高亮跟着画布上显示的那张走，不跟着导航状态。
-    ///
-    /// 按下翻页时导航状态立刻就变，图片要等解码。高亮如果跟着导航状态，
-    /// 就会先于画面挪过去，两个动画一前一后，看着不同步。
-    func testFilmstripHighlightWaitsForTheImageToLandOnCanvas() async throws {
+    /// 胶片条在按键当轮开始移动，图片解码期间也有即时反馈。
+    func testFilmstripHighlightRespondsWhenNavigationStarts() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -191,19 +163,14 @@ final class ChromeMaterialTests: XCTestCase {
         controller.window?.contentView?.layoutSubtreeIfNeeded()
         XCTAssertEqual(controller.filmstripHighlightedTitleForTesting, "a")
 
-        // 翻页这一步是同步的，解码还没回来，高亮必须还停在原地。
+        // 翻页这一步是同步的，高亮也应在同一轮切到目标条目。
         controller.showNextImageForTesting()
         XCTAssertEqual(controller.currentImageURLForTesting?.lastPathComponent, "b.png", "导航状态已经翻过去了")
         XCTAssertEqual(
             controller.filmstripHighlightedTitleForTesting,
-            "a",
-            "画面还没换，高亮不该抢先挪走"
+            "b",
+            "胶片条不等待解码，按键后立即开始滑动"
         )
-
-        for _ in 0..<500 where controller.filmstripHighlightedTitleForTesting != "b" {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        XCTAssertEqual(controller.filmstripHighlightedTitleForTesting, "b", "图片落到画布后高亮才跟上")
     }
 
     /// 连续浏览本身就是把整个序列铺开滚，再挂一条胶卷等于同一件事说两遍。

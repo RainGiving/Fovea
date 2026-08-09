@@ -13,7 +13,7 @@ enum Motion {
     /// 常规过渡：浮层进出、两种视图互换。
     static let standard: TimeInterval = 0.24
 
-    /// 要走一段距离的大件：信息栏停靠、chrome 收放、网格与单图互换。
+    /// 要走一段距离的大件：信息栏、chrome 收放、网格与单图互换。
     static let expressive: TimeInterval = 0.32
 
     /// 退场取入场的这个比例。东西离开时不该让人等。
@@ -27,6 +27,9 @@ enum Motion {
 
     /// 位置和尺寸变化：两端都收得住，中段走得快。
     static let move = CAMediaTimingFunction(controlPoints: 0.33, 0.85, 0.15, 1)
+
+    /// 连续翻页：保留快速响应，同时让起步和落点都有缓冲。
+    static let navigation = CAMediaTimingFunction(controlPoints: 0.2, 0.68, 0.24, 1)
 
     /// 末端带一点回弹，用在按钮点亮这种点状反馈上。
     static let springy = CAMediaTimingFunction(controlPoints: 0.22, 1.32, 0.36, 1)

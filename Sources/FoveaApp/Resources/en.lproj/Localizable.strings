@@ -225,8 +225,6 @@
 "inspector.copy" = "Copy";
 "inspector.copied" = "Copied";
 "inspector.reveal" = "Show in Finder";
-"inspector.dock" = "Dock Sidebar";
-"inspector.undock" = "Show as Overlay";
 "inspector.close" = "Close Inspector";
 "inspector.exposureTime" = "Exposure";
 "inspector.aperture" = "Aperture";

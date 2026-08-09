@@ -225,8 +225,6 @@
 "inspector.copy" = "复制";
 "inspector.copied" = "已复制";
 "inspector.reveal" = "在访达中显示";
-"inspector.dock" = "停靠侧栏";
-"inspector.undock" = "显示为浮层";
 "inspector.close" = "关闭信息面板";
 "inspector.exposureTime" = "曝光时间";
 "inspector.aperture" = "光圈";

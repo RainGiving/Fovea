@@ -75,7 +75,7 @@ struct WindowPresentation: Equatable {
     var showsEmptyState: Bool
     var showsErrorState: Bool
     var showsInspector: Bool
-    /// 停靠的信息栏要图片让出一条。浮动时不占地方。
+    /// 信息侧栏显示时，图片始终让出这一列。
     var reservesInspectorColumn: Bool
     var showsFilmstrip: Bool
     /// 底栏里那几个只有看图时才有意义的状态。
@@ -97,7 +97,6 @@ struct WindowPresentation: Equatable {
         var isEditing: Bool
         var chromeVisible: Bool
         var inspectorEnabled: Bool
-        var inspectorDocked: Bool
         var filmstripEnabled: Bool
         var canEditCurrentImage: Bool
         var canToggleGrid: Bool
@@ -110,7 +109,6 @@ struct WindowPresentation: Equatable {
             isEditing: Bool = false,
             chromeVisible: Bool = true,
             inspectorEnabled: Bool = false,
-            inspectorDocked: Bool = false,
             filmstripEnabled: Bool = false,
             canEditCurrentImage: Bool = false,
             canToggleGrid: Bool = false,
@@ -122,7 +120,6 @@ struct WindowPresentation: Equatable {
             self.isEditing = isEditing
             self.chromeVisible = chromeVisible
             self.inspectorEnabled = inspectorEnabled
-            self.inspectorDocked = inspectorDocked
             self.filmstripEnabled = filmstripEnabled
             self.canEditCurrentImage = canEditCurrentImage
             self.canToggleGrid = canToggleGrid
@@ -161,7 +158,7 @@ struct WindowPresentation: Equatable {
             showsEmptyState: mode == .empty,
             showsErrorState: mode == .error,
             showsInspector: showsInspector,
-            reservesInspectorColumn: showsInspector && input.inspectorDocked,
+            reservesInspectorColumn: showsInspector,
             showsFilmstrip: filmstripVisible(
                 isEnabled: input.filmstripEnabled,
                 hasImage: hasImage,

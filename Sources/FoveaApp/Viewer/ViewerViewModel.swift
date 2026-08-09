@@ -809,7 +809,6 @@ final class ViewerViewModel: ObservableObject {
                 switch event {
                 case let .preview(image):
                     guard loadPhase != .full else { continue }
-                    currentMetadata = nil
                     loadPhase = .preview
                     currentImage = image
                 case let .full(loaded):
@@ -914,7 +913,6 @@ final class ViewerViewModel: ObservableObject {
         hasUnsavedEdits = false
         let generation = beginDisplayRequest()
         loadPhase = .loading
-        currentMetadata = nil
         persistedCurrentImage = nil
         displayedFileVersion = nil
         if !preservingError {

@@ -13,6 +13,20 @@ final class ImageCanvasView: NSView {
         case manual
     }
 
+    enum NavigationDirection {
+        case forward
+        case backward
+
+        var incomingOffset: CGFloat {
+            switch self {
+            case .forward: 14
+            case .backward: -14
+            }
+        }
+    }
+
+    static let navigationTransitionDuration: CFTimeInterval = 0.22
+
     private enum TrackpadScrollAxis {
         case horizontal
         case vertical
@@ -58,9 +72,8 @@ final class ImageCanvasView: NSView {
 
         // 几何改动一律不要隐式动画，否则拖动会拖出一条 0.25 秒的尾巴。
         //
-        // 抑制写在图层自己的 actions 上，不包 CATransaction。翻页时
-        // `playNavigationTransition` 会往画布图层挂一条推入过渡，显式的
-        // begin/commit 有可能把内容先提交出去，过渡就没有前一帧可以推。
+        // 抑制写在图层自己的 actions 上，不包 CATransaction。翻页的淡化和
+        // 轻微位移是显式动画，不会给拖动和缩放留下延迟。
         let staticActions: [String: CAAction] = [
             "position": NSNull(),
             "bounds": NSNull(),
@@ -103,6 +116,64 @@ final class ImageCanvasView: NSView {
             rebuildBackdropInBackground()
             onTransformChanged?(scale)
         }
+    }
+
+    /// 图片使用交叉淡化，同时只移动很短的距离。连续翻页时从图层当前的显示位置
+    /// 接着走，新动画不会把上一段位移硬切回起点。
+    func playNavigationTransition(direction: NavigationDirection?) {
+        guard Motion.canAnimate(self), let rootLayer = layer else { return }
+
+        let hadIncomingDrift = imageLayer.animation(forKey: "navigation.drift") != nil
+        let presentationX = imageLayer.presentation()?.position.x
+        imageLayer.removeAnimation(forKey: "navigation.response")
+        imageLayer.removeAnimation(forKey: "navigation.drift")
+
+        let dissolve = CATransition()
+        dissolve.type = .fade
+        dissolve.duration = Self.navigationTransitionDuration
+        dissolve.timingFunction = Motion.navigation
+        rootLayer.add(dissolve, forKey: "navigation.dissolve")
+
+        guard let direction, !imageLayer.isHidden else { return }
+        let targetX = imageLayer.position.x
+
+        let startX: CGFloat
+        if hadIncomingDrift, let presentationX, abs(presentationX - targetX) > 0.25 {
+            startX = presentationX
+        } else {
+            startX = targetX + direction.incomingOffset
+        }
+        let drift = CABasicAnimation(keyPath: "position.x")
+        drift.fromValue = startX
+        drift.toValue = targetX
+        drift.duration = Self.navigationTransitionDuration
+        drift.timingFunction = Motion.navigation
+        imageLayer.add(drift, forKey: "navigation.drift")
+    }
+
+    /// 解码开始时先让当前图片沿翻页方向松动几像素。反馈和按键同一帧出现，
+    /// 新图片到达后再由交叉淡化接手，不会在等待解码时显得卡住。
+    func prepareNavigation(direction: NavigationDirection) {
+        guard Motion.canAnimate(self), !imageLayer.isHidden else { return }
+        let targetX = imageLayer.position.x
+        let currentX = imageLayer.presentation()?.position.x ?? targetX
+        imageLayer.removeAnimation(forKey: "navigation.response")
+        imageLayer.removeAnimation(forKey: "navigation.drift")
+
+        let response = CABasicAnimation(keyPath: "position.x")
+        response.fromValue = currentX
+        response.toValue = targetX - direction.incomingOffset * 0.32
+        response.duration = 0.1
+        response.timingFunction = Motion.navigation
+        response.fillMode = .forwards
+        response.isRemovedOnCompletion = false
+        imageLayer.add(response, forKey: "navigation.response")
+    }
+
+    func cancelNavigationTransition() {
+        imageLayer.removeAnimation(forKey: "navigation.response")
+        imageLayer.removeAnimation(forKey: "navigation.drift")
+        layer?.removeAnimation(forKey: "navigation.dissolve")
     }
 
     /// 玻璃 chrome 压在画布上，底下得有东西才折射得出来。
@@ -337,7 +408,7 @@ final class ImageCanvasView: NSView {
 
     /// 可用区域变化时让图片滑过去，而不是瞬间跳到新位置。
     ///
-    /// 停靠信息栏、收放 chrome 都是慢慢让出一条空间，图片得跟着一起走。
+    /// 收放信息栏和 chrome 都是慢慢让出空间，图片得跟着一起走。
     func setContentInsets(
         _ insets: NSEdgeInsets,
         animated: Bool,

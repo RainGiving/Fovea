@@ -58,7 +58,6 @@ final class WindowPresentationTests: XCTestCase {
             mode: .grid,
             isEditing: true,
             inspectorEnabled: true,
-            inspectorDocked: true,
             filmstripEnabled: true,
             canEditCurrentImage: true,
             canToggleGrid: true,
@@ -106,7 +105,6 @@ final class WindowPresentationTests: XCTestCase {
         let presentation = WindowPresentation.resolve(WindowPresentation.Input(
             mode: .single,
             inspectorEnabled: true,
-            inspectorDocked: true,
             filmstripEnabled: true,
             canEditCurrentImage: true,
             itemCount: 3,

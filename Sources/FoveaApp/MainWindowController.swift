@@ -192,7 +192,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private var cancellables: Set<AnyCancellable> = []
     private var gestureCoordinator: GestureCoordinator?
     private var keyMonitor: LocalEventMonitor?
-    private var outsideClickMonitor: LocalEventMonitor?
     private var displayedItemURL: URL?
     private var associatedViewerURL: URL?
     private var externalFileCheckTimer: Timer?
@@ -208,21 +207,20 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     /// 同一条目的预览和完整图只播放一次换页过渡。
     private var lastTransitionedItemID: ImageItem.ID?
     private var hasTransitionedCurrentItem = false
-    /// 这一次换图该往哪个方向滑。翻页时设，画面更新后消费掉。
-    private var pendingNavigationSlide: CATransitionSubtype?
+    /// 这一次换图该往哪个方向走。翻页时设，画面更新后消费掉。
+    private var pendingNavigationDirection: ImageCanvasView.NavigationDirection?
     /// 正在拖滑杆。此时忽略胶卷条回传的进度，避免自己推自己。
     private var isDraggingFilmstripSlider = false
     private var inspectorTrailingConstraint: NSLayoutConstraint!
     private var inspectorTopConstraint: NSLayoutConstraint!
     private var inspectorBottomConstraint: NSLayoutConstraint!
-    /// 信息面板的固定宽度，停靠时画布让出的正是这个宽度。
+    /// 信息面板的固定宽度，打开侧栏时画布让出这个宽度。
     private var pageNavigationTrailingConstraint: NSLayoutConstraint!
     /// 这两条是浮层进出时用来位移的把手。
     private var cropControlsBottomConstraint: NSLayoutConstraint!
     private var usageHintTopConstraint: NSLayoutConstraint!
     private var titleBarHeightConstraint: NSLayoutConstraint!
     private var bottomBarHeightConstraint: NSLayoutConstraint!
-    private var isInspectorDocked = false
     private var isPointerOverPageControls = false
     private var folderRetryTask: Task<Void, Never>?
     private var continuousReadingTask: Task<Void, Never>?
@@ -306,7 +304,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         folderRetryTask?.cancel()
         continuousReadingTask?.cancel()
         keyMonitor?.invalidate()
-        outsideClickMonitor?.invalidate()
         let folderBrowserViewModel = folderBrowserViewModel
         folderBrowserViewModel.invalidateOpenFolderRequest()
         Task { @MainActor in
@@ -527,11 +524,12 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                 }
                 self.hasImage = image != nil
                 self.refreshPresentation()
-                let slide = self.pendingNavigationSlide
-                self.pendingNavigationSlide = nil
+                let navigationDirection = self.pendingNavigationDirection
+                self.pendingNavigationDirection = nil
                 if image == nil {
                     self.lastTransitionedItemID = nil
                     self.hasTransitionedCurrentItem = false
+                    self.canvas.cancelNavigationTransition()
                 }
                 let shouldTransition = image != nil
                     && (!self.hasTransitionedCurrentItem || itemID != self.lastTransitionedItemID)
@@ -542,7 +540,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                 guard self.settings.animatesNavigationTransitions,
                       !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                       shouldTransition else { return }
-                self.playNavigationTransition(slide: slide)
+                self.canvas.playNavigationTransition(direction: navigationDirection)
             }
             .store(in: &cancellables)
 
@@ -644,7 +642,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                 self.canEditImage = loadPhase == .full && image != nil
                 self.refreshPresentation()
                 self.announceLoadedImageIfNeeded(hasImage: image != nil, loadPhase: loadPhase)
-                self.advanceFilmstripHighlightIfDisplayed(loadPhase: loadPhase)
             }
             .store(in: &cancellables)
 
@@ -673,7 +670,10 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
                         self.associatedViewerURL = newURL.standardizedFileURL
                     }
                 }
-                self.syncFilmstripContent(navigationState: state)
+                if didNavigate {
+                    self.filmstripHighlightID = state?.currentItem?.id
+                }
+                self.syncFilmstripContent(navigationState: state, animated: didNavigate)
                 let availability = Self.pageControlAvailability(
                     navigationState: state,
                     readingDirection: self.settings.readingDirection
@@ -700,7 +700,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             .store(in: &cancellables)
 
         installKeyMonitor()
-        installOutsideClickMonitor()
         applySettings()
         updateDimensionStatus(metadata: viewModel.currentMetadata)
         updatePageStatus(navigationState: viewModel.navigationState)
@@ -750,7 +749,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             lessThanOrEqualTo: bottomBarView.topAnchor,
             constant: -GlassMetrics.floatingInset
         )
-        // 翻页按钮浮在画布右沿，信息栏停靠时要跟着往左让，否则右边那颗被压在面板底下。
+        // 翻页按钮浮在画布右沿，信息栏打开时要跟着往左让，否则右边按钮会被面板盖住。
         pageNavigationTrailingConstraint = pageNavigationOverlayView.trailingAnchor.constraint(
             equalTo: canvas.trailingAnchor
         )
@@ -1644,38 +1643,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         self.keyMonitor = nil
     }
 
-    /// 浮动的信息栏点到别处就收起来。
-    ///
-    /// 它是一块盖在图片上的临时面板，看完就该让开。停靠成侧栏的那种是常驻的，
-    /// 不参与这条规则。事件只看不拦，点下去该做什么照做。
-    private func installOutsideClickMonitor() {
-        outsideClickMonitor?.invalidate()
-        outsideClickMonitor = LocalEventMonitor(mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
-            self.dismissFloatingInspectorIfClickedOutside(event)
-            return event
-        }
-    }
-
-    private func dismissFloatingInspectorIfClickedOutside(_ event: NSEvent) {
-        guard settings.showsInspector, !isInspectorDocked, !inspectorView.isHidden else { return }
-        guard let hitView = rootView.hitTest(rootView.convert(event.locationInWindow, from: nil)) else { return }
-        guard Self.shouldDismissFloatingInspector(
-            hitViewIsInsideInspector: hitView.isDescendant(of: inspectorView),
-            hitViewIsTheInspectorToggle: hitView.isDescendant(of: bottomInfoButton)
-        ) else { return }
-        settings.showsInspector = false
-    }
-
-    /// 点在面板自己身上不收；点在那颗开关上也不收，
-    /// 否则这里先关掉、开关再打开，按下去就像没反应。
-    static func shouldDismissFloatingInspector(
-        hitViewIsInsideInspector: Bool,
-        hitViewIsTheInspectorToggle: Bool
-    ) -> Bool {
-        !hitViewIsInsideInspector && !hitViewIsTheInspectorToggle
-    }
-
     private func handleKeyDown(_ event: NSEvent) -> Bool {
         hideUsageHint()
         revealFullScreenChromeIfNeeded()
@@ -2061,19 +2028,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         refreshPresentation()
     }
 
-    /// 胶卷条高亮的是画布上正显示的那张，不是导航状态里选中的那张。
-    ///
-    /// 按下翻页时导航状态立刻就变，图片要等解码回来才换。两边各自跟各自的时机
-    /// 走，胶卷条先滑、画面后换，看着就是没对上。高亮统一等到图片落到画布那一刻
-    /// 再挪，两个动画在同一个 runloop 回合里开始，节奏才一致。
-    private func advanceFilmstripHighlightIfDisplayed(loadPhase: ImageLoadPhase) {
-        guard loadPhase != .loading else { return }
-        guard let currentID = viewModel.navigationState?.currentItem?.id,
-              currentID != filmstripHighlightID else { return }
-        filmstripHighlightID = currentID
-        syncFilmstripContent(navigationState: viewModel.navigationState, animated: true)
-    }
-
     private func syncFilmstripContent(navigationState: NavigationState?, animated: Bool = false) {
         guard settings.showsFilmstrip else {
             filmstripView.apply(items: [], current: nil)
@@ -2106,7 +2060,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             isEditing: isEditingImage,
             chromeVisible: isChromeVisible,
             inspectorEnabled: settings.showsInspector,
-            inspectorDocked: isInspectorDocked,
             filmstripEnabled: settings.showsFilmstrip,
             canEditCurrentImage: canEditImage,
             canToggleGrid: canToggleTitleBarGrid(folderState: folderRouteState),
@@ -2199,21 +2152,11 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private func updateInspector(metadata: ImageMetadata?) {
         inspectorView.rootView = InspectorView(
             metadata: metadata,
-            isDocked: isInspectorDocked,
-            onToggleDock: { [weak self] in self?.toggleInspectorDock() },
             onClose: { [weak self] in self?.settings.showsInspector = false }
         )
     }
 
-    private func toggleInspectorDock() {
-        isInspectorDocked.toggle()
-        updateInspector(metadata: viewModel.currentMetadata)
-        // 停靠改变的是图片的可用区域，画面要跟着一起让，不能只有面板在动。
-        refreshPresentation()
-        applyReservedLayout(animated: true)
-    }
-
-    /// 停靠的信息栏要占掉的横向空间：面板宽度加上它两侧的间距。
+    /// 信息侧栏占掉的横向空间：面板宽度加上它两侧的间距。
     private var reservedInspectorWidth: CGFloat {
         presentation.reservesInspectorColumn
             ? GlassMetrics.inspectorWidth + GlassMetrics.floatingInset * 2
@@ -2247,8 +2190,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
 
     /// 信息栏让出的那一条落到图片和几块浮层上。
     private func applyReservedLayout(animated: Bool) {
-        // 信息栏永远是一块浮起的圆角玻璃，四周留同样的间距。停靠只表示它常驻，
-        // 并且图片往左让出它占的这一条，不再贴到窗口边上。
+        // 信息栏是一块常驻的圆角侧栏，图片往左让出它占的这一条。
         inspectorTopConstraint?.constant = GlassMetrics.floatingInset
         inspectorBottomConstraint?.constant = -GlassMetrics.floatingInset
         let reserved = reservedInspectorWidth
@@ -2342,27 +2284,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private func updateFilmstripSliderAvailability() {
         filmstripSlider.isEnabled = filmstripView.isScrollable
     }
-
-    /// 换图的过渡。
-    ///
-    /// 翻页时按方向推入，新画面从指针来的那一侧滑进来，方向感和左右按钮一致。
-    /// 不是翻页导致的换图（打开、编辑后重绘）没有方向，退回淡入。
-    private func playNavigationTransition(slide: CATransitionSubtype?) {
-        canvas.wantsLayer = true
-        let transition = CATransition()
-        transition.duration = Self.navigationTransitionDuration
-        // 和其余入场动作同一条曲线：推得快，收得住。
-        transition.timingFunction = Motion.entrance
-        if let slide {
-            transition.type = .push
-            transition.subtype = slide
-        } else {
-            transition.type = .fade
-        }
-        canvas.layer?.add(transition, forKey: "navigation")
-    }
-
-    static let navigationTransitionDuration: CFTimeInterval = 0.16
 
     private func revealPageControls() {
         guard presentation.allowsPageControls else {
@@ -2806,10 +2727,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var folderBrowserIsOperatingForTesting: Bool { folderBrowserViewModel.isOperating }
     var isCanvasVisibleForTesting: Bool { !canvas.isHidden }
     var canvasForTesting: ImageCanvasView { canvas }
-    var isInspectorDockedForTesting: Bool { isInspectorDocked }
     var reservedInspectorWidthForTesting: CGFloat { reservedInspectorWidth }
-
-    func toggleInspectorDockForTesting() { toggleInspectorDock() }
     var continuousReadingViewForTesting: ContinuousReadingView { continuousReadingView }
     var isFullScreenChromeVisibleForTesting: Bool {
         !titleBarView.isHidden && !bottomBarView.isHidden
@@ -3078,14 +2996,18 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         cancelCrop(nil)
         confirmUnsavedEditsIfNeeded(for: .navigating) { [weak self] in
             guard let self else { return }
-            self.pendingNavigationSlide = .fromRight
+            self.pendingNavigationDirection = .forward
             let didNavigate: Bool
             if self.settings.readingDirection == .leftToRight {
                 didNavigate = self.viewModel.showNext()
             } else {
                 didNavigate = self.viewModel.showPrevious()
             }
-            if !didNavigate { self.pendingNavigationSlide = nil }
+            if didNavigate {
+                self.prepareNavigationFeedback(.forward)
+            } else {
+                self.pendingNavigationDirection = nil
+            }
         }
     }
 
@@ -3094,22 +3016,44 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         cancelCrop(nil)
         confirmUnsavedEditsIfNeeded(for: .navigating) { [weak self] in
             guard let self else { return }
-            self.pendingNavigationSlide = .fromLeft
+            self.pendingNavigationDirection = .backward
             let didNavigate: Bool
             if self.settings.readingDirection == .leftToRight {
                 didNavigate = self.viewModel.showPrevious()
             } else {
                 didNavigate = self.viewModel.showNext()
             }
-            if !didNavigate { self.pendingNavigationSlide = nil }
+            if didNavigate {
+                self.prepareNavigationFeedback(.backward)
+            } else {
+                self.pendingNavigationDirection = nil
+            }
         }
     }
 
     private func selectImage(_ item: ImageItem) {
         cancelCrop(nil)
         confirmUnsavedEditsIfNeeded(for: .navigating) { [weak self] in
-            self?.viewModel.show(item: item)
+            guard let self else { return }
+            self.pendingNavigationDirection = nil
+            if let state = self.viewModel.navigationState,
+               let currentIndex = state.currentIndex,
+               let targetIndex = state.items.firstIndex(of: item),
+               currentIndex != targetIndex {
+                self.pendingNavigationDirection = targetIndex > currentIndex ? .forward : .backward
+            }
+            if self.viewModel.show(item: item), let direction = self.pendingNavigationDirection {
+                self.prepareNavigationFeedback(direction)
+            } else {
+                self.pendingNavigationDirection = nil
+            }
         }
+    }
+
+    private func prepareNavigationFeedback(_ direction: ImageCanvasView.NavigationDirection) {
+        guard settings.animatesNavigationTransitions,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        canvas.prepareNavigation(direction: direction)
     }
 
     private func performEdit(_ operation: EditOperation) {
@@ -3234,8 +3178,6 @@ extension MainWindowController: NSWindowDelegate {
         continuousReadingTask?.cancel()
         continuousReadingTask = nil
         removeKeyMonitor()
-        outsideClickMonitor?.invalidate()
-        outsideClickMonitor = nil
         externalFileCheckTimer?.invalidate()
         externalFileCheckTimer = nil
         onWindowDidClose?(self)

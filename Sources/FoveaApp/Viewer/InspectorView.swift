@@ -4,15 +4,9 @@ import SwiftUI
 
 struct InspectorView: View {
     let metadata: ImageMetadata?
-    var isDocked = false
-    var onToggleDock: () -> Void = {}
     var onClose: () -> Void = {}
 
-    /// 始终是一块独立的玻璃，圆角不随停靠变化。
-    ///
-    /// 以前停靠时改成直角贴着窗口边，面板的直角和窗口自己的圆角对不齐，
-    /// 边上会露出底下那条直边。现在停靠只表示常驻并让图片让出这一条，
-    /// 面板本身还是浮着的。
+    /// 侧栏保留圆角和窗口环境底图之间的间距。
     var cornerRadius: CGFloat { GlassMetrics.panelCornerRadius }
 
     var body: some View {
@@ -22,14 +16,6 @@ struct InspectorView: View {
                     Text(AppStrings.text("inspector.title"))
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
-                    // 图钉容易被理解成「置顶」，这里用侧栏和窗口图标
-                    // 直接表达停靠与浮动两种摆法。
-                    Button(action: onToggleDock) {
-                        Image(systemName: isDocked ? "macwindow" : "sidebar.right")
-                    }
-                    .buttonStyle(.plain)
-                    .help(AppStrings.text(isDocked ? "inspector.undock" : "inspector.dock"))
-                    .accessibilityLabel(AppStrings.text(isDocked ? "inspector.undock" : "inspector.dock"))
                     Button(action: onClose) {
                         Image(systemName: "xmark")
                     }

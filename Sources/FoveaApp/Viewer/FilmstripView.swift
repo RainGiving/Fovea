@@ -25,6 +25,9 @@ final class FilmstripView: NSScrollView {
     /// 亮度变化的时长。比滑动短一些，跟手不拖沓。
     static let thumbnailFadeDuration: TimeInterval = 0.1
 
+    /// 描边在旧缩略图和新缩略图之间交叉收放，避免选中框硬跳。
+    static let selectionRingTransitionDuration: TimeInterval = 0.18
+
     private final class FilmstripButton: NSButton {
         /// 同一个 URL 的条目会在扫描前后带不同的修改时间和大小，
         /// 复用按钮时把这份数据换成新的，选中判定和回调都按最新的走。
@@ -101,7 +104,17 @@ final class FilmstripView: NSScrollView {
             effectiveAppearance.performAsCurrentDrawingAppearance {
                 layer?.borderColor = NSColor.controlAccentColor.cgColor
             }
-            layer?.borderWidth = isCurrent ? FilmstripView.selectionRingWidth : 0
+            let targetBorderWidth = isCurrent ? FilmstripView.selectionRingWidth : 0
+            let currentBorderWidth = layer?.presentation()?.borderWidth ?? layer?.borderWidth ?? 0
+            layer?.borderWidth = targetBorderWidth
+            if window != nil, abs(currentBorderWidth - targetBorderWidth) > 0.01 {
+                let ringAnimation = CABasicAnimation(keyPath: "borderWidth")
+                ringAnimation.fromValue = currentBorderWidth
+                ringAnimation.toValue = targetBorderWidth
+                ringAnimation.duration = FilmstripView.selectionRingTransitionDuration
+                ringAnimation.timingFunction = Motion.navigation
+                layer?.add(ringAnimation, forKey: "filmstrip.selectionRing")
+            }
             let targetAlpha = FilmstripView.thumbnailAlpha(isSelected: isCurrent, isHovered: isHovered)
             // 亮度变化淡过去，选中和悬停都不再是硬跳。没上屏时直接落值。
             guard window != nil, abs(alphaValue - targetAlpha) > 0.001 else {
@@ -195,6 +208,10 @@ final class FilmstripView: NSScrollView {
     private var isUpdatingCenteredLayout = false
     private var allItems: [ImageItem] = []
     private var retainedItems: [ImageItem] = []
+    private var recenterLink: CADisplayLink?
+    private var recenterTargetX: CGFloat?
+    private var recenterVelocityX: CGFloat = 0
+    private var lastRecenterTimestamp: CFTimeInterval?
 
     var onSelect: ((ImageItem) -> Void)?
     /// 横向滚动位置变化时回调，滑杆靠它跟随。
@@ -213,6 +230,7 @@ final class FilmstripView: NSScrollView {
             return min(max(contentView.bounds.minX / range, 0), 1)
         }
         set {
+            stopRecenterAnimation()
             let range = scrollableWidth
             guard range > 0 else { return }
             let clamped = min(max(newValue, 0), 1)
@@ -259,6 +277,19 @@ final class FilmstripView: NSScrollView {
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window == nil else { return }
+        recenterLink?.invalidate()
+        recenterLink = nil
+        stopRecenterAnimation()
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        stopRecenterAnimation()
+        super.scrollWheel(with: event)
     }
 
     func apply(items: [ImageItem], current: ImageItem?, animated: Bool = false) {
@@ -462,27 +493,72 @@ final class FilmstripView: NSScrollView {
         let originX = min(max(0, selectedCenter - contentView.bounds.width / 2), maximumOrigin)
         let target = NSPoint(x: originX, y: 0)
 
-        // 没有窗口就没有动画可言，直接落位，测试也走这条。
-        guard animated, window != nil else {
-            contentView.scroll(to: target)
-            reflectScrolledClipView(contentView)
+        guard animated, Motion.canAnimate(self), abs(contentView.bounds.minX - originX) > 0.1 else {
+            finishRecenter(at: target)
             return
         }
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.recenterDuration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            contentView.animator().setBoundsOrigin(target)
-        } completionHandler: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.reflectScrolledClipView(self.contentView)
-            }
+        recenterTargetX = originX
+        if recenterLink == nil {
+            let link = displayLink(target: self, selector: #selector(stepRecenterAnimation))
+            link.add(to: .main, forMode: .common)
+            recenterLink = link
+        }
+        recenterLink?.isPaused = false
+    }
+
+    /// 胶片条采用临界阻尼附近的连续弹簧。连续翻页只改终点并保留当前速度，
+    /// 缩略图不会在每次按键时停住再重新起步。
+    static let recenterSpringStiffness: CGFloat = 400
+    static let recenterSpringDamping: CGFloat = 38
+
+    @objc private func stepRecenterAnimation() {
+        guard let targetX = recenterTargetX else {
+            recenterLink?.isPaused = true
+            return
+        }
+        let now = CACurrentMediaTime()
+        let deltaTime = min(max(now - (lastRecenterTimestamp ?? now - 1 / 60), 1 / 240), 1 / 30)
+        lastRecenterTimestamp = now
+        let next = Self.recenterSpringStep(
+            position: contentView.bounds.minX,
+            velocity: recenterVelocityX,
+            target: targetX,
+            deltaTime: CGFloat(deltaTime)
+        )
+        recenterVelocityX = next.velocity
+        contentView.scroll(to: CGPoint(x: next.position, y: 0))
+        reflectScrolledClipView(contentView)
+
+        if abs(next.position - targetX) < 0.12, abs(next.velocity) < 2 {
+            finishRecenter(at: CGPoint(x: targetX, y: 0))
         }
     }
 
-    /// 换图时胶卷条滑到新位置用的时长。和翻页的推入过渡取同一档，两边的节奏才对得上。
-    static let recenterDuration: TimeInterval = 0.12
+    static func recenterSpringStep(
+        position: CGFloat,
+        velocity: CGFloat,
+        target: CGFloat,
+        deltaTime: CGFloat
+    ) -> (position: CGFloat, velocity: CGFloat) {
+        let displacement = position - target
+        let acceleration = -recenterSpringStiffness * displacement - recenterSpringDamping * velocity
+        let nextVelocity = velocity + acceleration * deltaTime
+        return (position + nextVelocity * deltaTime, nextVelocity)
+    }
+
+    private func finishRecenter(at target: CGPoint) {
+        stopRecenterAnimation()
+        contentView.scroll(to: target)
+        reflectScrolledClipView(contentView)
+    }
+
+    private func stopRecenterAnimation() {
+        recenterTargetX = nil
+        recenterVelocityX = 0
+        lastRecenterTimestamp = nil
+        recenterLink?.isPaused = true
+    }
 
     /// 解不出来的图给一个占位符号，空着一格看起来像是加载卡住了。
     private static var thumbnailFallbackImage: NSImage? {

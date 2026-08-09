@@ -135,7 +135,7 @@ enum AppStrings {
         "inspector.file",
         "inspector.path", "inspector.colorSpace", "inspector.colorProfile",
         "inspector.bitDepth", "inspector.orientation", "inspector.copy",
-        "inspector.reveal", "inspector.dock", "inspector.undock", "inspector.close",
+        "inspector.reveal", "inspector.close",
         "inspector.exposureTime", "inspector.aperture", "inspector.isoSpeed", "inspector.focalLength",
         "inspector.noImage",
         "inspector.unknown"

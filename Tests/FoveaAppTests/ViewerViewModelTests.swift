@@ -756,11 +756,12 @@ final class ViewerViewModelTests: XCTestCase {
         await fullLoader.pauseNextLoad(for: secondURL)
 
         XCTAssertTrue(viewModel.showNext())
+        XCTAssertEqual(viewModel.currentMetadata?.pixelWidth, 40)
         await fullLoader.waitUntilPaused(url: secondURL)
         await waitUntil { viewModel.currentImage?.pixelSize == secondPreview.pixelSize }
 
         XCTAssertEqual(viewModel.loadPhase, .preview)
-        XCTAssertNil(viewModel.currentMetadata)
+        XCTAssertEqual(viewModel.currentMetadata?.pixelWidth, 40)
 
         try await fullLoader.resume(url: secondURL)
         await waitUntil { viewModel.loadPhase == .full }

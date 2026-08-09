@@ -28,6 +28,46 @@ final class FilmstripViewTests: XCTestCase {
         XCTAssertEqual(selectedSize, regularSize)
     }
 
+    func testRecenterSpringConvergesWithoutStoppingBetweenRetargets() {
+        var position: CGFloat = 0
+        var velocity: CGFloat = 0
+        for _ in 0..<5 {
+            let next = FilmstripView.recenterSpringStep(
+                position: position,
+                velocity: velocity,
+                target: 78,
+                deltaTime: 1 / 60
+            )
+            position = next.position
+            velocity = next.velocity
+        }
+
+        let velocityBeforeRetarget = velocity
+        let retargeted = FilmstripView.recenterSpringStep(
+            position: position,
+            velocity: velocity,
+            target: 156,
+            deltaTime: 1 / 60
+        )
+        XCTAssertGreaterThan(retargeted.position, position)
+        XCTAssertGreaterThan(retargeted.velocity, velocityBeforeRetarget)
+
+        position = retargeted.position
+        velocity = retargeted.velocity
+        for _ in 0..<120 {
+            let next = FilmstripView.recenterSpringStep(
+                position: position,
+                velocity: velocity,
+                target: 156,
+                deltaTime: 1 / 60
+            )
+            position = next.position
+            velocity = next.velocity
+        }
+        XCTAssertEqual(position, 156, accuracy: 0.1)
+        XCTAssertEqual(velocity, 0, accuracy: 0.5)
+    }
+
     func testFilmstripUsesReadableThumbnailAndOverlayDimensions() {
         XCTAssertEqual(FilmstripView.thumbnailSize(isSelected: false), CGSize(width: 72, height: 64))
         XCTAssertEqual(FilmstripView.thumbnailSize(isSelected: true), CGSize(width: 72, height: 64))

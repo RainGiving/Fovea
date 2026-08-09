@@ -21,7 +21,7 @@ enum GlassMetrics {
     static let hoverTintAlpha: CGFloat = 0.14
     static let pressedTintAlpha: CGFloat = 0.24
 
-    /// 信息面板的固定宽度。停靠成侧栏时画布让出的就是这个宽度。
+    /// 信息侧栏的固定宽度。
     static let inspectorWidth: CGFloat = 220
 
     /// 胶囊圆角按高度取一半。
