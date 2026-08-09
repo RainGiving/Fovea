@@ -52,7 +52,8 @@ final class AppSettings: ObservableObject {
 
     init(defaults: UserDefaults = .standard, showsFilmstripOverride: Bool? = nil) {
         self.defaults = defaults
-        showsFilmstrip = showsFilmstripOverride ?? defaults.bool(forKey: Self.showsFilmstripKey)
+        showsFilmstrip = showsFilmstripOverride
+            ?? (defaults.object(forKey: Self.showsFilmstripKey) as? Bool ?? true)
         showsInspector = defaults.bool(forKey: Self.showsInspectorKey)
         confirmsDelete = defaults.object(forKey: Self.confirmsDeleteKey) as? Bool ?? true
         animatesNavigationTransitions = defaults.object(forKey: Self.animatesNavigationTransitionsKey) as? Bool ?? true

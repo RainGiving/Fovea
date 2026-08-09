@@ -3,11 +3,11 @@ import XCTest
 
 @MainActor
 final class AppSettingsTests: XCTestCase {
-    func testDefaultsFavorPreviewLikeSafetyAndHiddenFilmstrip() {
+    func testDefaultsFavorPreviewLikeSafetyAndVisibleFilmstrip() {
         let defaults = makeIsolatedDefaults()
         let settings = AppSettings(defaults: defaults)
 
-        XCTAssertFalse(settings.showsFilmstrip)
+        XCTAssertTrue(settings.showsFilmstrip)
         XCTAssertFalse(settings.showsInspector)
         XCTAssertTrue(settings.confirmsDelete)
         XCTAssertTrue(settings.animatesNavigationTransitions)

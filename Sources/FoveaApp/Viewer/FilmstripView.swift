@@ -4,7 +4,8 @@ import FoveaCore
 @MainActor
 final class FilmstripView: NSScrollView {
     static let regularThumbnailSize = CGSize(width: 72, height: 64)
-    static let selectedThumbnailSize = CGSize(width: 81, height: 72)
+    /// 选中态保持同样的占位尺寸，只用描边和亮度表达，换图时整排不会反复重排。
+    static let selectedThumbnailSize = regularThumbnailSize
     static let thumbnailDecodeMaxPixelSize: CGFloat = 192
     static let retainedItemRadius = 20
     static let maximumRetainedItemCount = retainedItemRadius * 2 + 1
@@ -22,7 +23,7 @@ final class FilmstripView: NSScrollView {
     static let hoveredThumbnailAlpha: CGFloat = 0.85
 
     /// 亮度变化的时长。比滑动短一些，跟手不拖沓。
-    static let thumbnailFadeDuration: TimeInterval = 0.14
+    static let thumbnailFadeDuration: TimeInterval = 0.1
 
     private final class FilmstripButton: NSButton {
         /// 同一个 URL 的条目会在扫描前后带不同的修改时间和大小，
@@ -30,8 +31,6 @@ final class FilmstripView: NSScrollView {
         var item: ImageItem
         var thumbnailRequest: ThumbnailRequest?
         private(set) var isCurrent = false
-        /// 留着原始那张，换选中状态时按新的宽高比重新裁一次。
-        private var sourceThumbnail: CGImage?
         private var widthConstraint: NSLayoutConstraint!
         private var heightConstraint: NSLayoutConstraint!
 
@@ -52,22 +51,17 @@ final class FilmstripView: NSScrollView {
         }
 
         func configure(isSelected: Bool) {
-            let thumbnailSize = FilmstripView.thumbnailSize(isSelected: isSelected)
             if widthConstraint == nil {
+                let thumbnailSize = FilmstripView.regularThumbnailSize
                 widthConstraint = widthAnchor.constraint(equalToConstant: thumbnailSize.width)
                 heightConstraint = heightAnchor.constraint(equalToConstant: thumbnailSize.height)
                 widthConstraint.isActive = true
                 heightConstraint.isActive = true
             } else if isCurrent == isSelected {
-                // 选中态没变就什么都不用做。翻一页只有两格真的换了状态，
-                // 其余四十来格白跑一趟裁切、NSImage 分配和图层改动。
+                // 选中态没变就什么都不用做。
                 return
-            } else {
-                widthConstraint.constant = thumbnailSize.width
-                heightConstraint.constant = thumbnailSize.height
             }
             isCurrent = isSelected
-            applyThumbnail()
             refreshSelectionAppearance()
         }
 
@@ -76,22 +70,12 @@ final class FilmstripView: NSScrollView {
         /// 横幅照片按比例缩进方格里，上下会剩两条空带，一排看下来像是没加载完。
         /// 裁切只是取原图的一个子区域，不重新采样，代价可以忽略。
         func setThumbnail(_ thumbnail: NSImage) {
-            sourceThumbnail = thumbnail.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            guard let sourceThumbnail = thumbnail.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+                image = thumbnail
+                return
+            }
             contentTintColor = nil
-            applyThumbnail()
-        }
-
-        /// 解不出来的那张给一个居中的占位符号，这时候不该裁切也不该铺满。
-        func setFallback(_ fallback: NSImage?) {
-            sourceThumbnail = nil
-            imageScaling = .scaleProportionallyDown
-            image = fallback
-            contentTintColor = .tertiaryLabelColor
-        }
-
-        private func applyThumbnail() {
-            guard let sourceThumbnail else { return }
-            let target = FilmstripView.thumbnailSize(isSelected: isCurrent)
+            let target = FilmstripView.regularThumbnailSize
             imageScaling = .scaleProportionallyUpOrDown
             image = NSImage(
                 cgImage: FilmstripView.centerCropped(
@@ -100,6 +84,13 @@ final class FilmstripView: NSScrollView {
                 ),
                 size: target
             )
+        }
+
+        /// 解不出来的那张给一个居中的占位符号，这时候不该裁切也不该铺满。
+        func setFallback(_ fallback: NSImage?) {
+            imageScaling = .scaleProportionallyDown
+            image = fallback
+            contentTintColor = .tertiaryLabelColor
         }
 
         /// 选中态用一圈强调色描边表示，不再靠系统 bezel 画一块底板。
@@ -288,7 +279,8 @@ final class FilmstripView: NSScrollView {
             rebuild(items: Self.retainedWindow(in: items, centeredAt: currentIndex), current: current)
         } else {
             updateSelection(current: current)
-            updateCenteredLayout(force: true, animated: animated)
+            // 选择变化不再改变任何格子的尺寸，文档几何保持不动，直接更新滚动位置。
+            centerSelectedThumbnail(animated: animated)
         }
     }
 
@@ -455,7 +447,7 @@ final class FilmstripView: NSScrollView {
     private func resizeDocumentToFit() {
         stack.layoutSubtreeIfNeeded()
         let fittingSize = stack.fittingSize
-        // 翻页时一格放大、另一格缩小，总宽正好抵消。尺寸没变就别再走一趟布局。
+        // 容器尺寸没变就不重复走布局。
         guard abs(stack.frame.width - fittingSize.width) > 0.5
             || abs(stack.frame.height - fittingSize.height) > 0.5 else { return }
         stack.frame.size = fittingSize
@@ -490,7 +482,7 @@ final class FilmstripView: NSScrollView {
     }
 
     /// 换图时胶卷条滑到新位置用的时长。和翻页的推入过渡取同一档，两边的节奏才对得上。
-    static let recenterDuration: TimeInterval = 0.16
+    static let recenterDuration: TimeInterval = 0.12
 
     /// 解不出来的图给一个占位符号，空着一格看起来像是加载卡住了。
     private static var thumbnailFallbackImage: NSImage? {

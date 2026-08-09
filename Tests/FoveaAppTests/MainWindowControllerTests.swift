@@ -5,18 +5,46 @@ import XCTest
 
 @MainActor
 final class MainWindowControllerTests: XCTestCase {
-    func testFilmstripSitsAboveBottomBarAndNeverCoversIt() throws {
-        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+    func testFilmstripExpandsInsideBottomBarAndLeavesRoomForTheImage() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("filmstrip.png")
+        try writeTestPNG(to: imageURL)
+        let settings = AppSettings(defaults: makeIsolatedDefaults())
+        let controller = MainWindowController(settings: settings)
         let window = try XCTUnwrap(controller.window)
         window.setContentSize(NSSize(width: 1100, height: 760))
+
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         window.contentView?.layoutSubtreeIfNeeded()
 
         let filmstrip = controller.filmstripOverlayFrameForTesting
         let bottomBar = controller.bottomBarFrameForTesting
 
-        XCTAssertFalse(filmstrip.intersects(bottomBar))
-        // rootView 未翻转，y 向上增长，胶卷条的下沿必须高于下边栏的上沿。
-        XCTAssertGreaterThanOrEqual(filmstrip.minY, bottomBar.maxY)
+        XCTAssertEqual(bottomBar.height, MainWindowController.expandedBottomBarHeight, accuracy: 0.5)
+        XCTAssertTrue(bottomBar.contains(filmstrip))
+        XCTAssertEqual(filmstrip.minY, bottomBar.minY + MainWindowController.bottomBarHeight, accuracy: 0.5)
+        XCTAssertEqual(filmstrip.maxY, bottomBar.maxY, accuracy: 0.5)
+        XCTAssertEqual(
+            controller.canvasForTesting.contentInsets.bottom,
+            MainWindowController.expandedBottomBarHeight,
+            accuracy: 0.5
+        )
+
+        controller.toggleFilmstrip(nil)
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        XCTAssertFalse(controller.isFilmstripVisibleForTesting)
+        XCTAssertEqual(controller.bottomBarFrameForTesting.height, MainWindowController.bottomBarHeight, accuracy: 0.5)
+        XCTAssertEqual(
+            controller.canvasForTesting.contentInsets.bottom,
+            MainWindowController.bottomBarHeight,
+            accuracy: 0.5
+        )
     }
 
     /// 没有图可编辑的时候按钮不该可按，也不该亮着。
@@ -882,6 +910,7 @@ final class MainWindowControllerTests: XCTestCase {
     func testFilmstripMenuValidationReflectsSettingState() {
         let defaults = UserDefaults(suiteName: "FoveaAppTests.Filmstrip.\(UUID().uuidString)")!
         let settings = AppSettings(defaults: defaults)
+        settings.showsFilmstrip = false
         let controller = MainWindowController(window: nil, settings: settings)
         let item = NSMenuItem(title: "Show Filmstrip", action: #selector(MainWindowController.toggleFilmstrip(_:)), keyEquivalent: "")
 

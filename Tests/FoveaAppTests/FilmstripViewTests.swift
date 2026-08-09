@@ -5,33 +5,32 @@ import XCTest
 
 @MainActor
 final class FilmstripViewTests: XCTestCase {
-    func testOverlayUsesGlassPanelWithSharedCornerRadius() {
+    func testFilmstripContainerAddsNoIndependentSurface() {
         let overlay = FilmstripOverlayView()
 
-        XCTAssertEqual(overlay.cornerRadius, GlassMetrics.panelCornerRadius)
+        XCTAssertIdentical(overlay.contentView, overlay)
+        XCTAssertTrue(overlay.subviews.isEmpty)
     }
 
-    func testFilmstripContentLivesInsideTheGlass() {
+    func testFilmstripContentLivesInsideTheContainer() {
         let overlay = FilmstripOverlayView()
         let filmstrip = FilmstripView()
         overlay.contentView.addSubview(filmstrip)
 
-        // 内容必须挂在玻璃的 contentView 下，否则不会被玻璃包住。
         XCTAssertIdentical(filmstrip.superview, overlay.contentView)
-        XCTAssertFalse(overlay.subviews.contains(filmstrip))
+        XCTAssertTrue(overlay.subviews.contains(filmstrip))
     }
 
-    func testSelectedThumbnailUsesLargerDimensionsThanRegularThumbnail() {
+    func testSelectionKeepsThumbnailGeometryStable() {
         let regularSize = FilmstripView.thumbnailSize(isSelected: false)
         let selectedSize = FilmstripView.thumbnailSize(isSelected: true)
 
-        XCTAssertGreaterThan(selectedSize.width, regularSize.width)
-        XCTAssertGreaterThan(selectedSize.height, regularSize.height)
+        XCTAssertEqual(selectedSize, regularSize)
     }
 
     func testFilmstripUsesReadableThumbnailAndOverlayDimensions() {
         XCTAssertEqual(FilmstripView.thumbnailSize(isSelected: false), CGSize(width: 72, height: 64))
-        XCTAssertEqual(FilmstripView.thumbnailSize(isSelected: true), CGSize(width: 81, height: 72))
+        XCTAssertEqual(FilmstripView.thumbnailSize(isSelected: true), CGSize(width: 72, height: 64))
         XCTAssertEqual(FilmstripView.thumbnailDecodeMaxPixelSize, 192)
         // 选中的缩略图加上下内边距，再加下方滑杆的高度。
         XCTAssertGreaterThan(
@@ -164,6 +163,21 @@ final class FilmstripViewTests: XCTestCase {
         }
 
         XCTAssertEqual(filmstrip.debugSelectedTitle(), "519")
+    }
+
+    func testChangingSelectionDoesNotReflowThumbnailFrames() {
+        let items = makeItems(count: 7)
+        let filmstrip = FilmstripView()
+        filmstrip.frame = NSRect(x: 0, y: 0, width: 360, height: 78)
+        filmstrip.apply(items: items, current: items[2])
+        filmstrip.layoutSubtreeIfNeeded()
+        let originalFrames = filmstrip.debugButtons().map(\.frame)
+
+        filmstrip.apply(items: items, current: items[3])
+        filmstrip.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(filmstrip.debugButtons().map(\.frame), originalFrames)
+        assertSelectedThumbnailCentered(filmstrip)
     }
 
     /// 缩略图按格子的宽高比居中裁一刀，横幅照片不再在上下留两条空带。

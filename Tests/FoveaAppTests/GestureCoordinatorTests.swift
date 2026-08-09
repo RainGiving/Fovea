@@ -15,7 +15,7 @@ final class GestureCoordinatorTests: XCTestCase {
         XCTAssertEqual(clickRecognizers.first?.numberOfClicksRequired, 2)
     }
 
-    func testDoubleClickTogglesFitAndActualSize() {
+    func testDoubleClickZoomsAroundClickedPointAndReturnsToFit() {
         let canvas = ImageCanvasView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
         let context = CGContext(
             data: nil,
@@ -33,11 +33,14 @@ final class GestureCoordinatorTests: XCTestCase {
         )
         let coordinator = GestureCoordinator(canvas: canvas)
 
-        coordinator.applyDoubleClick()
+        coordinator.applyDoubleClick(at: CGPoint(x: 300, y: 150))
         XCTAssertEqual(canvas.scale, 2, accuracy: 0.001)
         XCTAssertEqual(canvas.pixelScale!, 1, accuracy: 0.001)
+        XCTAssertEqual(canvas.offset.x, -100, accuracy: 0.001)
+        XCTAssertEqual(canvas.offset.y, 0, accuracy: 0.001)
 
-        coordinator.applyDoubleClick()
+        coordinator.applyDoubleClick(at: CGPoint(x: 300, y: 150))
         XCTAssertEqual(canvas.scale, 1, accuracy: 0.001)
+        XCTAssertEqual(canvas.offset, .zero)
     }
 }

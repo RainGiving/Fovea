@@ -22,10 +22,10 @@ final class GestureCoordinator: NSObject {
         canvas?.zoom(by: 1.0 + magnification, around: point)
     }
 
-    /// 双击是一步到位的切换，画面滑过去。捏合要跟手，那条路照旧不带过渡。
-    func applyDoubleClick() {
+    /// 双击是一步到位的切换，并把点击处留在原地。
+    func applyDoubleClick(at point: CGPoint) {
         guard let canvas else { return }
-        canvas.withAnimatedGeometry { canvas.toggleFitOrActualSize() }
+        canvas.withAnimatedGeometry { canvas.toggleFitOrActualSize(around: point) }
     }
 
     @objc private func handleMagnification(_ gesture: NSMagnificationGestureRecognizer) {
@@ -36,7 +36,8 @@ final class GestureCoordinator: NSObject {
     }
 
     @objc private func handleDoubleClick(_ gesture: NSClickGestureRecognizer) {
-        applyDoubleClick()
+        guard let canvas else { return }
+        applyDoubleClick(at: gesture.location(in: canvas))
     }
 
 }

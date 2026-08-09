@@ -6,13 +6,12 @@ import XCTest
 /// 窗口 chrome 的材质与信息栏的摆法。
 @MainActor
 final class ChromeMaterialTests: XCTestCase {
-    /// 上下边栏和图片留白区域压着同一层模糊底，边栏要用更透的一档，
-    /// 否则会读成另一种材质，和留白那一片对不上。
-    func testContentBarsUseClearGlassSoTheySharePictureBackdrop() {
+    /// 上下边栏只在环境底图上加渐变染色，不再形成两块独立玻璃。
+    func testContentBarsUseAmbientChromeOverThePictureBackdrop() {
         let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
 
-        XCTAssertEqual(controller.titleBarGlassStyleForTesting, .clear)
-        XCTAssertEqual(controller.bottomBarGlassStyleForTesting, .clear)
+        XCTAssertTrue(controller.titleBarViewForTesting is AmbientChromeView)
+        XCTAssertTrue(controller.bottomBarViewForTesting is AmbientChromeView)
     }
 
     /// 信息栏无论停靠与否都是圆角。以前停靠时改成直角贴边，
@@ -109,8 +108,8 @@ final class ChromeMaterialTests: XCTestCase {
         XCTAssertFalse(controller.isFilmstripVisibleForTesting, "只有关掉开关才收起来")
     }
 
-    /// 信息栏停靠时胶卷条要往左收，否则会被压在面板底下。
-    func testFilmstripStepsAsideForTheDockedInspector() async throws {
+    /// 胶片区域已经进入下边栏，信息栏停靠时不需要横向跳动。
+    func testDockedInspectorDoesNotMoveOrCoverTheFilmstrip() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -138,7 +137,7 @@ final class ChromeMaterialTests: XCTestCase {
             dockedFrame.intersects(inspectorFrame),
             "胶卷条 \\(dockedFrame) 不该压进信息栏 \\(inspectorFrame)"
         )
-        XCTAssertLessThan(dockedFrame.maxX, floatingFrame.maxX, "右沿要往左收")
+        XCTAssertEqual(dockedFrame, floatingFrame)
     }
 
     /// 右边那颗翻页按钮同样要让开停靠的信息栏。

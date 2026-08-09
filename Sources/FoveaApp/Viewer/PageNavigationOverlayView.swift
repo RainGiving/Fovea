@@ -55,16 +55,22 @@ final class PageNavigationButton: NSButton {
         refreshAppearance()
     }
 
-    /// 玻璃 bezel 自己负责材质和按压反馈，这里只调符号的颜色：
-    /// 悬停时提到强调色，禁用时压到三级灰。
+    /// 静置时只保留带阴影的符号，悬停和按下才显示轻量底色。
     func refreshAppearance() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             if !isEnabled {
-                contentTintColor = .tertiaryLabelColor
+                contentTintColor = NSColor.white.withAlphaComponent(0.28)
             } else if isPressed || isHovered {
-                contentTintColor = .controlAccentColor
+                contentTintColor = .white
             } else {
-                contentTintColor = .labelColor
+                contentTintColor = NSColor.white.withAlphaComponent(0.92)
+            }
+            layer?.backgroundColor = if isPressed {
+                NSColor.black.withAlphaComponent(GlassMetrics.pressedTintAlpha).cgColor
+            } else if isHovered {
+                NSColor.black.withAlphaComponent(GlassMetrics.hoverTintAlpha).cgColor
+            } else {
+                NSColor.clear.cgColor
             }
         }
         needsDisplay = true
@@ -276,16 +282,20 @@ final class PageNavigationOverlayView: NSView {
             accessibilityDescription: description
         )?.withSymbolConfiguration(symbolConfiguration)
         button.imageScaling = .scaleProportionallyDown
-        // 玻璃 bezel 自带材质、圆角和阴影，不再手工画图层。
-        button.bezelStyle = .glass
-        button.isBordered = true
+        button.bezelStyle = .shadowlessSquare
+        button.isBordered = false
         button.wantsLayer = true
+        button.layer?.cornerRadius = 14
+        button.layer?.shadowColor = NSColor.black.cgColor
+        button.layer?.shadowOpacity = 0.55
+        button.layer?.shadowRadius = 2
+        button.layer?.shadowOffset = .zero
         button.target = self
         button.action = action
         button.toolTip = description
         button.focusRingType = .default
         if let cell = button.cell as? NSButtonCell {
-            cell.isBordered = true
+            cell.isBordered = false
         }
         // 符号颜色由 refreshAppearance 决定，构建时先定一次，
         // 否则要等到第一次悬停才会着色。

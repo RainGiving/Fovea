@@ -5,9 +5,6 @@ import AppKit
 /// 圆角、浮层间距和融合阈值都从这里取值，整个应用只有一套数字，
 /// 改设计时改这里，不用去每个视图里翻魔数。
 enum GlassMetrics {
-    /// 贴着窗口边的 chrome，圆角交给窗口本身。
-    static let chromeCornerRadius: CGFloat = 0
-
     /// 浮在图片上方的面板：胶卷条、信息面板、提示条、裁剪控件。
     static let panelCornerRadius: CGFloat = 16
 
@@ -16,9 +13,6 @@ enum GlassMetrics {
 
     /// 浮层与窗口边缘之间留的距离。
     static let floatingInset: CGFloat = 16
-
-    /// 玻璃视图开始相互融合的距离，传给 `NSGlassEffectContainerView`。
-    static let mergeSpacing: CGFloat = 12
 
     /// 玻璃表面上悬停和按下的着色强度。
     ///

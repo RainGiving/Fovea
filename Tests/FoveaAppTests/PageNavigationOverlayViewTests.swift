@@ -84,12 +84,13 @@ final class PageNavigationOverlayViewTests: XCTestCase {
         )))
     }
 
-    func testButtonsUseGlassBezelInsteadOfHandDrawnLayers() {
+    func testButtonsKeepTheRestingSurfaceBorderless() {
         let view = PageNavigationOverlayView()
 
         for button in [view.debugPreviousButton, view.debugNextButton] {
-            XCTAssertEqual(button.bezelStyle, .glass)
-            XCTAssertTrue(button.isBordered)
+            XCTAssertEqual(button.bezelStyle, .shadowlessSquare)
+            XCTAssertFalse(button.isBordered)
+            XCTAssertEqual(button.layer?.cornerRadius, 14)
         }
     }
 
@@ -116,16 +117,16 @@ final class PageNavigationOverlayViewTests: XCTestCase {
         XCTAssertEqual(view.debugPreviousButton.frame.minX, PageNavigationOverlayView.edgeInset, accuracy: 0.001)
     }
 
-    func testHoverLiftsSymbolToAccentColorAndDisabledDropsIt() {
+    func testHoverBrightensTheSymbolAndDisabledStateDimsIt() {
         let view = PageNavigationOverlayView()
         let button = view.debugNextButton
 
-        XCTAssertEqual(button.contentTintColor, .labelColor)
+        XCTAssertEqual(button.contentTintColor, NSColor.white.withAlphaComponent(0.92))
 
         button.setHoveredForTesting(true)
-        XCTAssertEqual(button.contentTintColor, .controlAccentColor)
+        XCTAssertEqual(button.contentTintColor, .white)
 
         button.isEnabled = false
-        XCTAssertEqual(button.contentTintColor, .tertiaryLabelColor)
+        XCTAssertEqual(button.contentTintColor, NSColor.white.withAlphaComponent(0.28))
     }
 }

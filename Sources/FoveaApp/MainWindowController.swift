@@ -31,16 +31,12 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     static let bottomBarInfoSymbolName = "info.circle"
     static let bottomBarStatusToInfoSpacing: CGFloat = 8
     static let filmstripOverlayHeight: CGFloat = 118
+    static let expandedBottomBarHeight = bottomBarHeight + filmstripOverlayHeight
     static let overlayAutoHideDelay: TimeInterval = 1.8
-    /// 浮层出现和收起的时长。胶卷条和翻页按钮共用这一档，两边的节奏才对得上。
+    /// 胶片区域和翻页按钮出现、收起的时长。
     static let overlayRevealDuration: TimeInterval = Motion.standard
     static let overlayFadeOutDuration: TimeInterval = Motion.standard * Motion.exitRatio
-    /// 几块浮层各自的定位常数，以及它们收起时该退到哪。
-    ///
-    /// 进出都是「淡入淡出加一小段位移」：胶卷条从下边栏那侧升起来，编辑控制条
-    /// 也从下面推上来，首次使用提示则从标题栏底下垂下来。
-    static let filmstripBottomSpacing: CGFloat = -14
-    static let filmstripHiddenBottomSpacing: CGFloat = -14 + 16
+    /// 编辑控制条和首次使用提示进出时的定位常数。
     static let cropControlsBottomSpacing: CGFloat = -24
     static let cropControlsHiddenBottomSpacing: CGFloat = -24 + 26
     static let usageHintTopSpacing: CGFloat = 18
@@ -157,7 +153,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private let folderBrowserViewModel: FolderBrowserViewModel
     private let settings: AppSettings
     private let rootView = RootInteractionView()
-    private let titleBarView = GlassPanelView()
+    private let titleBarView = AmbientChromeView(edge: .top)
     private let titleLabel = NSTextField(labelWithString: "Fovea")
     private let titleBarGridButton = HoverToolbarButton()
     private let titleBarFilmstripButton = HoverToolbarButton()
@@ -177,7 +173,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private let cropOverlay = CropOverlayView()
     private let cropControlsView = NSHostingView(rootView: EditControlsView(onCancel: {}, onApply: {}))
     private let inspectorView = NSHostingView(rootView: InspectorView(metadata: nil))
-    private let bottomBarView = GlassPanelView()
+    private let bottomBarView = AmbientChromeView(edge: .bottom)
     private let bottomDimensionLabel = NSTextField(labelWithString: "— × — px")
     private let bottomPageLabel = NSTextField(labelWithString: "0 / 0")
     private let bottomZoomLabel = NSTextField(labelWithString: "100%")
@@ -221,11 +217,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private var inspectorBottomConstraint: NSLayoutConstraint!
     /// 信息面板的固定宽度，停靠时画布让出的正是这个宽度。
     private var pageNavigationTrailingConstraint: NSLayoutConstraint!
-    private var filmstripCenterXConstraint: NSLayoutConstraint!
-    private var filmstripTrailingConstraint: NSLayoutConstraint!
-    private var filmstripWidthConstraint: NSLayoutConstraint!
-    /// 这三条是浮层进出时用来位移的把手，各自都有一个「收起时」的常数。
-    private var filmstripBottomConstraint: NSLayoutConstraint!
+    /// 这两条是浮层进出时用来位移的把手。
     private var cropControlsBottomConstraint: NSLayoutConstraint!
     private var usageHintTopConstraint: NSLayoutConstraint!
     private var titleBarHeightConstraint: NSLayoutConstraint!
@@ -419,7 +411,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         rootView.addSubview(errorStateView)
         rootView.addSubview(titleBarView)
         rootView.addSubview(bottomBarView)
-        rootView.addSubview(filmstripOverlayView)
         rootView.addSubview(pageNavigationOverlayView)
         rootView.addSubview(inspectorView)
         rootView.addSubview(usageHintView)
@@ -427,6 +418,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         bottomBarView.contentView.addSubview(bottomPageLabel)
         bottomBarView.contentView.addSubview(bottomZoomLabel)
         bottomBarView.contentView.addSubview(bottomInfoButton)
+        bottomBarView.contentView.addSubview(filmstripOverlayView)
+        bottomBarView.contentView.wantsLayer = true
+        bottomBarView.contentView.layer?.masksToBounds = true
         filmstripOverlayView.contentView.addSubview(filmstripView)
         filmstripOverlayView.contentView.addSubview(filmstripSlider)
         rootView.addSubview(cropOverlay)
@@ -760,24 +754,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         pageNavigationTrailingConstraint = pageNavigationOverlayView.trailingAnchor.constraint(
             equalTo: canvas.trailingAnchor
         )
-        // 胶卷条跟着图片可用的那块区域走。信息栏停靠时右边让出一条，
-        // 胶卷条要往左收，否则会被压在面板底下。
-        filmstripCenterXConstraint = filmstripOverlayView.centerXAnchor.constraint(equalTo: canvas.centerXAnchor)
-        filmstripTrailingConstraint = filmstripOverlayView.trailingAnchor.constraint(
-            lessThanOrEqualTo: canvas.trailingAnchor,
-            constant: -GlassMetrics.floatingInset
-        )
-        // 窗口窄或者信息栏占了地方时，让位给上面那条上限，宽度自己缩。
-        filmstripWidthConstraint = filmstripOverlayView.widthAnchor.constraint(
-            equalTo: canvas.widthAnchor,
-            multiplier: 0.72
-        )
-        filmstripWidthConstraint.priority = .defaultHigh
-        // 胶卷条压在下边栏上方，不遮住 1 / 1 这一行状态。
-        filmstripBottomConstraint = filmstripOverlayView.bottomAnchor.constraint(
-            equalTo: bottomBarView.topAnchor,
-            constant: Self.filmstripBottomSpacing
-        )
         cropControlsBottomConstraint = cropControlsView.bottomAnchor.constraint(
             equalTo: bottomBarView.topAnchor,
             constant: Self.cropControlsBottomSpacing
@@ -836,22 +812,35 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             usageHintView.trailingAnchor.constraint(lessThanOrEqualTo: canvas.trailingAnchor, constant: -20),
             bottomDimensionLabel.leadingAnchor.constraint(equalTo: bottomBarView.leadingAnchor, constant: 12),
             bottomDimensionLabel.trailingAnchor.constraint(lessThanOrEqualTo: bottomPageLabel.leadingAnchor, constant: -12),
-            bottomDimensionLabel.centerYAnchor.constraint(equalTo: bottomBarView.centerYAnchor),
+            bottomDimensionLabel.centerYAnchor.constraint(
+                equalTo: bottomBarView.bottomAnchor,
+                constant: -Self.bottomBarHeight / 2
+            ),
             bottomPageLabel.centerXAnchor.constraint(equalTo: bottomBarView.centerXAnchor),
-            bottomPageLabel.centerYAnchor.constraint(equalTo: bottomBarView.centerYAnchor),
+            bottomPageLabel.centerYAnchor.constraint(
+                equalTo: bottomBarView.bottomAnchor,
+                constant: -Self.bottomBarHeight / 2
+            ),
             bottomPageLabel.trailingAnchor.constraint(lessThanOrEqualTo: bottomZoomLabel.leadingAnchor, constant: -12),
             bottomZoomLabel.trailingAnchor.constraint(equalTo: bottomInfoButton.leadingAnchor, constant: -Self.bottomBarStatusToInfoSpacing),
-            bottomZoomLabel.centerYAnchor.constraint(equalTo: bottomBarView.centerYAnchor),
+            bottomZoomLabel.centerYAnchor.constraint(
+                equalTo: bottomBarView.bottomAnchor,
+                constant: -Self.bottomBarHeight / 2
+            ),
             bottomInfoButton.trailingAnchor.constraint(equalTo: bottomBarView.trailingAnchor, constant: -8),
-            bottomInfoButton.centerYAnchor.constraint(equalTo: bottomBarView.centerYAnchor),
-            filmstripCenterXConstraint,
-            filmstripBottomConstraint,
-            filmstripWidthConstraint,
+            bottomInfoButton.centerYAnchor.constraint(
+                equalTo: bottomBarView.bottomAnchor,
+                constant: -Self.bottomBarHeight / 2
+            ),
+            filmstripOverlayView.leadingAnchor.constraint(equalTo: bottomBarView.contentView.leadingAnchor),
+            filmstripOverlayView.trailingAnchor.constraint(equalTo: bottomBarView.contentView.trailingAnchor),
+            filmstripOverlayView.bottomAnchor.constraint(
+                equalTo: bottomBarView.contentView.bottomAnchor,
+                constant: -Self.bottomBarHeight
+            ),
             filmstripOverlayView.heightAnchor.constraint(equalToConstant: Self.filmstripOverlayHeight),
-            filmstripOverlayView.leadingAnchor.constraint(greaterThanOrEqualTo: canvas.leadingAnchor, constant: 16),
-            filmstripTrailingConstraint,
-            filmstripView.leadingAnchor.constraint(equalTo: filmstripOverlayView.contentView.leadingAnchor, constant: 10),
-            filmstripView.trailingAnchor.constraint(equalTo: filmstripOverlayView.contentView.trailingAnchor, constant: -10),
+            filmstripView.leadingAnchor.constraint(equalTo: filmstripOverlayView.contentView.leadingAnchor, constant: 16),
+            filmstripView.trailingAnchor.constraint(equalTo: filmstripOverlayView.contentView.trailingAnchor, constant: -16),
             filmstripView.topAnchor.constraint(equalTo: filmstripOverlayView.contentView.topAnchor, constant: 10),
             filmstripView.bottomAnchor.constraint(equalTo: filmstripSlider.topAnchor, constant: -6),
             filmstripSlider.leadingAnchor.constraint(equalTo: filmstripOverlayView.contentView.leadingAnchor, constant: 14),
@@ -2150,7 +2139,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         Motion.setVisible(emptyStateView, next.showsEmptyState, duration: Motion.standard, animated: animated)
         Motion.setVisible(errorStateView, next.showsErrorState, duration: Motion.standard, animated: animated)
 
-        // 浮层
+        // 附加界面
         setFilmstripOverlayVisible(next.showsFilmstrip, animated: animated)
         setInspectorVisible(next.showsInspector, animated: animated)
         setEditChromeVisible(next.isEditing, animated: animated)
@@ -2172,6 +2161,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         // 让出来的那一条变了，或者内容层换了，才走一次整窗布局。
         if next.reservesInspectorColumn != previous.reservesInspectorColumn
             || next.showsChrome != previous.showsChrome
+            || next.showsFilmstrip != previous.showsFilmstrip
             || next.mode != previous.mode {
             applyReservedLayout(animated: animated)
         }
@@ -2230,6 +2220,11 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             : 0
     }
 
+    private var desiredBottomBarHeight: CGFloat {
+        guard isChromeVisible else { return 0 }
+        return presentation.showsFilmstrip ? Self.expandedBottomBarHeight : Self.bottomBarHeight
+    }
+
     /// 信息栏朝窗口右沿滑进滑出。
     ///
     /// 它占的那一条同时决定图片和几块浮层的位置，所以进出和布局一起动，
@@ -2256,7 +2251,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         // 并且图片往左让出它占的这一条，不再贴到窗口边上。
         inspectorTopConstraint?.constant = GlassMetrics.floatingInset
         inspectorBottomConstraint?.constant = -GlassMetrics.floatingInset
-        // 浮在画布上的那几层不受 contentInsets 影响，各自避开那一条。
         let reserved = reservedInspectorWidth
         Motion.run(
             in: animated ? rootView : nil,
@@ -2264,9 +2258,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             timing: Motion.move,
             animatesLayout: true
         ) {
-            filmstripCenterXConstraint?.constant = -reserved / 2
-            filmstripTrailingConstraint?.constant = -(GlassMetrics.floatingInset + reserved)
             pageNavigationTrailingConstraint?.constant = -reserved
+            titleBarHeightConstraint?.constant = isChromeVisible ? Self.titleBarHeight : 0
+            bottomBarHeightConstraint?.constant = desiredBottomBarHeight
             // 画布始终铺满整窗，模糊底才连成一片，玻璃底下也才有东西可以折射。
             // 图片靠 contentInsets 避开面板，和它避开上下边栏是同一套做法。
             updateCanvasContentInsets(chromeVisible: isChromeVisible, animated: animated)
@@ -2274,20 +2268,11 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         }
     }
 
-    /// 胶卷条从下边栏那一侧升起来，收起时按原路退回去。
-    ///
-    /// 显示与否只看开关和当前模式。原来它还跟着指针和缩放自己收起来，
-    /// 用户把它打开就是想一直看着它，那些自作主张的隐藏只会让人找不到它。
+    /// 胶片区域和下边栏共用同一层环境底图。高度动画由布局统一处理。
     private func setFilmstripOverlayVisible(_ visible: Bool, animated: Bool) {
         Motion.setVisible(
             filmstripOverlayView,
             visible,
-            slide: Motion.Slide(
-                filmstripBottomConstraint,
-                visible: Self.filmstripBottomSpacing,
-                hidden: Self.filmstripHiddenBottomSpacing,
-                in: rootView
-            ),
             duration: Self.overlayRevealDuration,
             animated: animated
         )
@@ -2310,31 +2295,17 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         )
     }
 
-    /// 上下两条玻璃边栏。全屏里跟着指针收放，一边收高度一边淡出。
+    /// 上下两条环境边栏。高度和画布留白在预留布局里同步变化。
     private func setChromeBarsVisible(_ visible: Bool, animated: Bool) {
         Motion.setVisible(
             titleBarView,
             visible,
-            slide: Motion.Slide(
-                titleBarHeightConstraint,
-                visible: Self.titleBarHeight,
-                hidden: 0,
-                in: rootView,
-                restoresWhenHidden: false
-            ),
             duration: Motion.expressive,
             animated: animated
         )
         Motion.setVisible(
             bottomBarView,
             visible,
-            slide: Motion.Slide(
-                bottomBarHeightConstraint,
-                visible: Self.bottomBarHeight,
-                hidden: 0,
-                in: rootView,
-                restoresWhenHidden: false
-            ),
             duration: Motion.expressive,
             animated: animated
         )
@@ -2442,9 +2413,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     private func configureContentBars() {
         for bar in [titleBarView, bottomBarView] {
             bar.translatesAutoresizingMaskIntoConstraints = false
-            // 用更透的一档玻璃。上下边栏和图片留白区域压着的是同一层模糊底，
-            // regular 太厚，边栏会读成另一种材质，和留白那一片对不上。
-            bar.glassStyle = .clear
         }
 
         titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -2736,7 +2704,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         let insets = NSEdgeInsets(
             top: chromeVisible ? Self.titleBarHeight : 0,
             left: 0,
-            bottom: chromeVisible ? Self.bottomBarHeight : 0,
+            bottom: chromeVisible
+                ? (presentation.showsFilmstrip ? Self.expandedBottomBarHeight : Self.bottomBarHeight)
+                : 0,
             right: reservedInspectorWidth
         )
         canvas.setContentInsets(insets, animated: animated)
@@ -2836,8 +2806,6 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var folderBrowserIsOperatingForTesting: Bool { folderBrowserViewModel.isOperating }
     var isCanvasVisibleForTesting: Bool { !canvas.isHidden }
     var canvasForTesting: ImageCanvasView { canvas }
-    var titleBarGlassStyleForTesting: NSGlassEffectView.Style { titleBarView.glassStyle }
-    var bottomBarGlassStyleForTesting: NSGlassEffectView.Style { bottomBarView.glassStyle }
     var isInspectorDockedForTesting: Bool { isInspectorDocked }
     var reservedInspectorWidthForTesting: CGFloat { reservedInspectorWidth }
 
@@ -2849,7 +2817,9 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     func revealFullScreenChromeForTesting() { revealFullScreenChromeIfNeeded() }
     var isFilmstripVisibleForTesting: Bool { !filmstripOverlayView.isHidden }
     var continuousReadingHasBackdropForTesting: Bool { continuousReadingView.testingHasBackdrop }
-    var filmstripOverlayFrameForTesting: NSRect { filmstripOverlayView.frame }
+    var filmstripOverlayFrameForTesting: NSRect {
+        rootView.convert(filmstripOverlayView.bounds, from: filmstripOverlayView)
+    }
     var inspectorFrameForTesting: NSRect { inspectorView.frame }
     // 这两个要读浮层内部的调试出口，那些出口只在 DEBUG 下存在。
     #if DEBUG
@@ -2874,6 +2844,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     var titleBarGridButtonForTesting: NSButton { titleBarGridButton }
     var titleBarControlsStackForTesting: NSStackView { titleBarControlsStack }
     var titleBarViewForTesting: NSView { titleBarView }
+    var bottomBarViewForTesting: NSView { bottomBarView }
     var titleBarDoubleClickRecognizerForTesting: NSClickGestureRecognizer { titleBarDoubleClickRecognizer }
 
     func shouldRecognizeTitleBarDoubleClickForTesting(hitView: NSView) -> Bool {

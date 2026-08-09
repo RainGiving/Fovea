@@ -644,9 +644,9 @@ final class ImageCanvasView: NSView {
         lastDragLocation = nil
     }
 
-    func toggleFitOrActualSize() {
+    func toggleFitOrActualSize(around point: CGPoint? = nil) {
         if displayMode == .fit || displayMode == .fitWidth {
-            setManualPixelScale(lastManualPixelScale ?? 1)
+            setManualPixelScale(lastManualPixelScale ?? 1, around: point)
         } else {
             resetViewTransform()
         }
