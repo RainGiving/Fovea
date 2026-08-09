@@ -49,6 +49,12 @@
       "purpose": "Defines the Swift package and build targets."
     },
     {
+      "path": "README-CN.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Introduces Fovea in Simplified Chinese and documents installation and development."
+    },
+    {
       "path": "README.md",
       "kind": "file",
       "state": "active",
@@ -847,6 +853,12 @@
       "purpose": "Contains documentation assets."
     },
     {
+      "path": "docs/assets/fovea-icon.png",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Shows the Fovea application icon in the README."
+    },
+    {
       "path": "docs/assets/performance",
       "kind": "directory",
       "state": "active",
@@ -899,6 +911,12 @@
       "kind": "directory",
       "state": "active",
       "purpose": "Contains README screenshots."
+    },
+    {
+      "path": "docs/assets/screenshots/fovea-viewer.png",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Shows the Fovea image viewer in the README."
     },
     {
       "path": "docs/assets/screenshots/fovea-welcome.png",
