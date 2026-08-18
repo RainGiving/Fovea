@@ -83,6 +83,70 @@ final class CropOverlayView: NSView {
         animateDisplayedCropRect(from: imageRect, to: cropRect)
     }
 
+    /// 选区在图片里的位置，归一化到 0...1，原点在左上角。
+    ///
+    /// 屏幕上那个 `cropRect` 随窗口大小、缩放和旋转一直在变，这一份不变，
+    /// 和取裁切像素时用的坐标系也是同一个。图片在画布上换了位置就按它重新
+    /// 铺一遍，图片本身被转过就先把它一起转过去。
+    var normalizedCropRect: CGRect {
+        guard imageRect.width > 0, imageRect.height > 0 else { return .zero }
+        return CGRect(
+            x: (cropRect.minX - imageRect.minX) / imageRect.width,
+            y: (cropRect.minY - imageRect.minY) / imageRect.height,
+            width: cropRect.width / imageRect.width,
+            height: cropRect.height / imageRect.height
+        )
+    }
+
+    /// 图片在画布上换了位置或尺寸，选区按原来的归一化位置铺到新区域上。
+    ///
+    /// 缩放窗口、收放信息栏、进出全屏都会挪动图片。不跟着搬的话，选区就停在
+    /// 图片原来占的那一块，用户拖不到画面上真正想要的范围。
+    func updateImageRect(_ newImageRect: CGRect) {
+        retarget(to: newImageRect, normalized: normalizedCropRect, animated: false)
+    }
+
+    /// 图片被旋转或翻转了，选区跟着同一块画面一起转过去。
+    ///
+    /// 转完宽高对调，画布上的图片是另一块区域了。只按新区域重铺还不够，
+    /// 归一化位置也要跟着内容走一遍，否则用户圈住的画面会在转完之后跑掉。
+    func applyContentTransform(_ operation: EditOperation, in newImageRect: CGRect) {
+        retarget(
+            to: newImageRect,
+            normalized: operation.movingNormalizedRect(normalizedCropRect),
+            animated: true
+        )
+    }
+
+    /// 把选区换到新的图片区域上。
+    ///
+    /// 锁了比例的话重铺之后要再收一次：新区域的长宽比和原来不同，
+    /// 照搬归一化位置会让屏幕上的选区偏离锁定的那个比例。
+    private func retarget(to newImageRect: CGRect, normalized: CGRect, animated: Bool) {
+        guard isCropping else { return }
+        guard newImageRect.width >= minimumCropSide,
+              newImageRect.height >= minimumCropSide else { return }
+
+        let previous = displayedCropRect
+        imageRect = newImageRect
+        var next = CGRect(
+            x: newImageRect.minX + normalized.minX * newImageRect.width,
+            y: newImageRect.minY + normalized.minY * newImageRect.height,
+            width: max(normalized.width * newImageRect.width, minimumCropSide),
+            height: max(normalized.height * newImageRect.height, minimumCropSide)
+        )
+        if aspectRatio.value != nil {
+            next = aspectRatio.constrained(next)
+        }
+        cropRect = fitted(next)
+
+        guard animated else {
+            finishCropRectTransition(at: cropRect)
+            return
+        }
+        animateDisplayedCropRect(from: previous, to: cropRect)
+    }
+
     /// 把选区推回画面之内。按比例收缩后中心可能落在边缘外，需要挪回来。
     private func fitted(_ rect: CGRect) -> CGRect {
         guard imageRect.width > 0, imageRect.height > 0 else { return rect }

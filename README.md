@@ -61,8 +61,12 @@ make audit     # Run the project audit
 make check     # Run tests and the audit
 make dmg       # Create .build/artifacts/Fovea-X.Y.Z.dmg
 make install   # Install /Applications/Fovea.app
+make default-app # Make Fovea the default app for its image types
 make clean     # Remove .build
 ```
+
+After changing the app, both `make install` and `make default-app` are required on
+the local machine. See [Post-update steps](docs/post-update-steps.md).
 
 ## Release
 

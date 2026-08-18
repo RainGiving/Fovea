@@ -3,7 +3,7 @@ PLIST := Sources/FoveaApp/Resources/Info.plist
 DECLARED_VERSION := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' $(PLIST))
 VERSION ?= $(DECLARED_VERSION)
 
-.PHONY: build test audit check dmg install clean version release
+.PHONY: build test audit check dmg install default-app clean version release
 
 build:
 	./scripts/build-app.sh
@@ -21,6 +21,9 @@ dmg:
 
 install:
 	./scripts/install-app.sh
+
+default-app:
+	swift scripts/set-default-image-app.swift
 
 clean:
 	rm -rf .build

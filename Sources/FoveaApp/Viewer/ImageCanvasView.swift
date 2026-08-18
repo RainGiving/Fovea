@@ -36,6 +36,13 @@ final class ImageCanvasView: NSView {
     var onPrevious: (() -> Void)?
     var onTransformChanged: ((CGFloat) -> Void)?
     var onContextMenuRequested: (() -> NSMenu?)?
+
+    /// 图片在画布上占的那块区域变了就报一声。
+    ///
+    /// 窗口大小、玻璃 chrome 让出的留白、缩放平移和换图都会改这块区域。
+    /// 裁切框据此跟着搬，不然编辑时选区会停在图片原来的位置上。
+    var onImageDrawRectChanged: ((CGRect) -> Void)?
+    private var reportedImageDrawRect: CGRect?
     private var lastDragLocation: CGPoint?
     private var trackpadScrollAxis: TrackpadScrollAxis?
     private var accumulatedTrackpadDeltaX: CGFloat = 0
@@ -306,6 +313,14 @@ final class ImageCanvasView: NSView {
         imageLayer.bounds = CGRect(origin: .zero, size: unrotated)
         imageLayer.position = CGPoint(x: drawRect.midX, y: drawRect.midY)
         imageLayer.transform = Self.contentTransform(quarterTurns: viewRotationQuarterTurns)
+        reportImageDrawRect(drawRect)
+    }
+
+    /// 区域真的变了才通知，同一个矩形反复算出来不必惊动外面。
+    private func reportImageDrawRect(_ drawRect: CGRect) {
+        guard reportedImageDrawRect != drawRect else { return }
+        reportedImageDrawRect = drawRect
+        onImageDrawRectChanged?(drawRect)
     }
 
     /// 查看旋转就是绕 z 轴转，不要再叠任何镜像。

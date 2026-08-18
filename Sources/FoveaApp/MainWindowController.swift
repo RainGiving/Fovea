@@ -458,6 +458,11 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
         canvas.onTransformChanged = { [weak self] _ in
             self?.updateZoomStatus()
         }
+        // 缩放窗口、收放信息栏、进出全屏都会挪动画布上的图片，
+        // 编辑时选区跟着一起搬，才始终落在画面上。
+        canvas.onImageDrawRectChanged = { [weak self] imageDrawRect in
+            self?.cropOverlay.updateImageRect(imageDrawRect)
+        }
         gestureCoordinator = GestureCoordinator(canvas: canvas)
         filmstripView.onSelect = { [weak self] item in
             self?.selectImage(item)
@@ -1139,11 +1144,21 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     }
 
     @objc func undoEdit(_ sender: Any?) {
-        if !viewModel.undoEdit() { NSSound.beep() }
+        guard let operation = viewModel.undoEdit() else {
+            NSSound.beep()
+            return
+        }
+        // 撤销就是把这一步反过来走一遍，选区也跟着退回去。
+        guard let reversed = operation.reversed else { return }
+        moveCropSelectionWithContent(reversed)
     }
 
     @objc func redoEdit(_ sender: Any?) {
-        if !viewModel.redoEdit() { NSSound.beep() }
+        guard let operation = viewModel.redoEdit() else {
+            NSSound.beep()
+            return
+        }
+        moveCropSelectionWithContent(operation)
     }
 
     @objc func toggleFilmstrip(_ sender: Any?) {
@@ -2723,6 +2738,7 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
     func showNextImageForTesting() { navigateToNextImage() }
     var hasUnsavedEditsForTesting: Bool { viewModel.hasUnsavedEdits }
     var isCroppingForTesting: Bool { cropOverlay.isCropping }
+    var cropRectForTesting: CGRect { cropOverlay.cropRect }
     var isFolderBrowserVisibleForTesting: Bool { !folderBrowserView.isHidden }
     var folderBrowserIsOperatingForTesting: Bool { folderBrowserViewModel.isOperating }
     var isCanvasVisibleForTesting: Bool { !canvas.isHidden }
@@ -3061,7 +3077,17 @@ final class MainWindowController: NSWindowController, NSGestureRecognizerDelegat
             NSSound.beep()
             return
         }
-        viewModel.applyEdit(operation)
+        guard viewModel.applyEdit(operation) else { return }
+        moveCropSelectionWithContent(operation)
+    }
+
+    /// 编辑改了像素，画布上的图片换了尺寸和位置，选区跟着同一块画面走。
+    ///
+    /// 旋转一下宽高就对调了，图片在画布上占的是另一块区域。不跟着走的话，
+    /// 选区会停在图片旋转前的那一块，用户拖不到真正想裁的范围。
+    private func moveCropSelectionWithContent(_ operation: EditOperation) {
+        guard cropOverlay.isCropping, let imageDrawRect = canvas.imageDrawRect else { return }
+        cropOverlay.applyContentTransform(operation, in: imageDrawRect)
     }
 
     private func confirmUnsavedEditsIfNeeded(

@@ -331,6 +331,12 @@
       "purpose": "Contains project source files."
     },
     {
+      "path": "Sources/FoveaApp/Viewer/RecentItemsListView.swift",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Contains project source files."
+    },
+    {
       "path": "Sources/FoveaApp/Viewer/RootInteractionView.swift",
       "kind": "file",
       "state": "active",
@@ -925,6 +931,12 @@
       "purpose": "Shows the Fovea welcome screen in the README."
     },
     {
+      "path": "docs/post-update-steps.md",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Records the install and default-application steps required after every update."
+    },
+    {
       "path": "docs/qa",
       "kind": "directory",
       "state": "active",
@@ -1316,6 +1328,12 @@
     },
     {
       "path": "scripts/run-memory-benchmarks.sh",
+      "kind": "file",
+      "state": "active",
+      "purpose": "Supports local build, packaging, or maintenance."
+    },
+    {
+      "path": "scripts/set-default-image-app.swift",
       "kind": "file",
       "state": "active",
       "purpose": "Supports local build, packaging, or maintenance."

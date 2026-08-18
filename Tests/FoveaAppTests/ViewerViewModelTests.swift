@@ -76,7 +76,7 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.undoMenuTitle, AppStrings.text("menu.edit.undoNamed")
             .replacingOccurrences(of: "%@", with: AppStrings.text("editing.operation.crop")))
 
-        XCTAssertTrue(viewModel.undoEdit())
+        XCTAssertNotNil(viewModel.undoEdit())
         XCTAssertEqual(viewModel.redoMenuTitle, AppStrings.text("menu.edit.redoNamed")
             .replacingOccurrences(of: "%@", with: AppStrings.text("editing.operation.crop")))
     }
@@ -1150,17 +1150,17 @@ final class ViewerViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.canUndo)
         XCTAssertFalse(viewModel.canRedo)
         XCTAssertEqual(viewModel.pendingOperationCountForTesting, 2)
-        XCTAssertTrue(viewModel.undoEdit())
+        XCTAssertNotNil(viewModel.undoEdit())
         XCTAssertEqual(viewModel.currentImage?.pixelSize, CGSize(width: 4, height: 6))
         XCTAssertEqual(viewModel.pendingOperationCountForTesting, 1)
         XCTAssertEqual(viewModel.redoOperationCountForTesting, 1)
 
-        XCTAssertTrue(viewModel.undoEdit())
+        XCTAssertNotNil(viewModel.undoEdit())
         XCTAssertEqual(viewModel.currentImage?.pixelSize, CGSize(width: 6, height: 4))
         XCTAssertFalse(viewModel.hasUnsavedEdits)
         XCTAssertTrue(viewModel.canRedo)
 
-        XCTAssertTrue(viewModel.redoEdit())
+        XCTAssertNotNil(viewModel.redoEdit())
         XCTAssertEqual(viewModel.currentImage?.pixelSize, CGSize(width: 4, height: 6))
         XCTAssertTrue(viewModel.hasUnsavedEdits)
     }
@@ -1171,7 +1171,7 @@ final class ViewerViewModelTests: XCTestCase {
         let viewModel = ViewerViewModel()
         await viewModel.open(url: imageURL)
         viewModel.applyEdit(.rotateClockwise)
-        XCTAssertTrue(viewModel.undoEdit())
+        XCTAssertNotNil(viewModel.undoEdit())
 
         viewModel.applyEdit(.mirrorVertical)
 

@@ -11,10 +11,10 @@ final class EmptyStateView: NSView {
     private let messageLabel = NSTextField(labelWithString: "")
     private let openButton = NSButton()
     private let browseFolderButton = NSButton()
-    private let recentStack = NSStackView()
-    private var recentURLs: [URL] = []
+    private let recentList: RecentItemsListView
 
     init(preferredLanguages: [String] = Locale.preferredLanguages) {
+        recentList = RecentItemsListView(preferredLanguages: preferredLanguages)
         super.init(frame: .zero)
 
         let text: (String) -> String = {
@@ -61,14 +61,16 @@ final class EmptyStateView: NSView {
         buttonStack.alignment = .centerY
         buttonStack.spacing = 8
 
-        recentStack.orientation = .vertical
-        recentStack.alignment = .centerX
-        recentStack.spacing = 4
-        let stack = NSStackView(views: [iconView, titleLabel, messageLabel, buttonStack, recentStack])
+        recentList.onOpen = { [weak self] url in self?.onOpenRecentRequested?(url) }
+        recentList.onClear = { [weak self] in self?.onClearRecentRequested?() }
+
+        let stack = NSStackView(views: [iconView, titleLabel, messageLabel, buttonStack, recentList])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 8
         stack.setCustomSpacing(14, after: messageLabel)
+        // 最近打开是另一件事，和上面那组动作之间留出一段，两块才分得开。
+        stack.setCustomSpacing(24, after: buttonStack)
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         addSubview(stack)
@@ -82,30 +84,7 @@ final class EmptyStateView: NSView {
     }
 
     func applyRecentItems(_ urls: [URL]) {
-        recentStack.arrangedSubviews.forEach {
-            recentStack.removeArrangedSubview($0)
-            $0.removeFromSuperview()
-        }
-        let visible = Array(urls.prefix(5))
-        recentURLs = visible
-        recentStack.isHidden = visible.isEmpty
-        guard !visible.isEmpty else { return }
-        let heading = NSTextField(labelWithString: AppStrings.text("emptyState.recent"))
-        heading.font = .systemFont(ofSize: 11, weight: .semibold)
-        heading.textColor = .secondaryLabelColor
-        recentStack.addArrangedSubview(heading)
-        for (index, url) in visible.enumerated() {
-            let button = NSButton(title: url.lastPathComponent, target: self, action: #selector(openRecent(_:)))
-            button.bezelStyle = .inline
-            button.toolTip = url.path
-            button.setAccessibilityLabel(url.lastPathComponent)
-            button.tag = index
-            recentStack.addArrangedSubview(button)
-        }
-        let clear = NSButton(title: AppStrings.text("emptyState.clearRecent"), target: self, action: #selector(clearRecent(_:)))
-        clear.bezelStyle = .inline
-        clear.contentTintColor = .secondaryLabelColor
-        recentStack.addArrangedSubview(clear)
+        recentList.apply(urls)
     }
 
     @objc private func requestOpen(_ sender: Any?) {
@@ -116,17 +95,11 @@ final class EmptyStateView: NSView {
         onBrowseFolderRequested?()
     }
 
-    @objc private func openRecent(_ sender: NSButton) {
-        guard recentURLs.indices.contains(sender.tag) else { return }
-        onOpenRecentRequested?(recentURLs[sender.tag])
-    }
-
-    @objc private func clearRecent(_ sender: Any?) { onClearRecentRequested?() }
-
     var titleTextForTesting: String { titleLabel.stringValue }
     var messageTextForTesting: String { messageLabel.stringValue }
     var buttonTitleForTesting: String { openButton.title }
     var browseFolderButtonTitleForTesting: String { browseFolderButton.title }
+    var recentListForTesting: RecentItemsListView { recentList }
 
     func performOpenForTesting() {
         requestOpen(nil)

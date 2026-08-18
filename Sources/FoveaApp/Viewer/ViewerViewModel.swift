@@ -486,11 +486,16 @@ final class ViewerViewModel: ObservableObject {
         fileActions.revealInFinder(url)
     }
 
-    func applyEdit(_ operation: EditOperation) {
-        guard canEditCurrentImage, let image = currentImage else { return }
+    /// 施加一次编辑。返回这一步有没有落到画面上。
+    ///
+    /// 走到额度上限或者变换本身失败时像素没有变，界面上跟着这一步走的东西
+    /// 也不能动，所以结果要报出来，不能只留一条错误信息。
+    @discardableResult
+    func applyEdit(_ operation: EditOperation) -> Bool {
+        guard canEditCurrentImage, let image = currentImage else { return false }
         guard pendingOperations.count < Self.maximumEditHistoryCount else {
             errorMessage = AppStrings.text("editing.history.limitReached")
-            return
+            return false
         }
 
         do {
@@ -508,23 +513,31 @@ final class ViewerViewModel: ObservableObject {
             hasUnsavedEdits = true
             errorMessage = nil
             updateDisplayTitle()
+            return true
         } catch {
             errorMessage = AppStrings.text("viewer.error.applyEditFailed")
+            return false
         }
     }
 
+    /// 撤销一步，返回被撤掉的那一步。没有可撤的或者重建失败时返回 nil。
+    ///
+    /// 裁切框要跟着画面一起退回去，光知道成功与否不够，还得知道退的是哪一步。
     @discardableResult
-    func undoEdit() -> Bool {
-        guard let operation = pendingOperations.popLast() else { return false }
+    func undoEdit() -> EditOperation? {
+        guard let operation = pendingOperations.popLast() else { return nil }
         redoOperations.append(operation)
-        return rebuildEditedImageFromHistory()
+        guard rebuildEditedImageFromHistory() else { return nil }
+        return operation
     }
 
+    /// 重做一步，返回被重做的那一步。
     @discardableResult
-    func redoEdit() -> Bool {
-        guard let operation = redoOperations.popLast() else { return false }
+    func redoEdit() -> EditOperation? {
+        guard let operation = redoOperations.popLast() else { return nil }
         pendingOperations.append(operation)
-        return rebuildEditedImageFromHistory()
+        guard rebuildEditedImageFromHistory() else { return nil }
+        return operation
     }
 
     @discardableResult

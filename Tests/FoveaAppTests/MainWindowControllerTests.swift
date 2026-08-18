@@ -552,6 +552,69 @@ final class MainWindowControllerTests: XCTestCase {
         XCTAssertEqual(controller.editControlsAlphaForTesting, 0, accuracy: 0.001)
     }
 
+    /// 编辑里先旋转再裁切。选区必须落在转过之后的图片上。
+    ///
+    /// 缺陷原样：进编辑时按当时的图片位置画出选区，此后再没更新过。
+    /// 旋转把宽高对调，图片在画布上换了一块区域，选区却还停在原处，
+    /// 于是可裁的范围仍然是没转之前那一块。
+    func testRotatingWhileEditingMovesTheCropSelectionOntoTheRotatedImage() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("landscape.png")
+        try writeTestPNG(to: imageURL, pixelsWide: 40, pixelsHigh: 10)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.startEditingImage(nil)
+        let landscapeDrawRect = try XCTUnwrap(controller.canvasForTesting.imageDrawRect)
+        XCTAssertTrue(landscapeDrawRect.contains(controller.cropRectForTesting))
+
+        controller.rotateClockwise(nil)
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+
+        let portraitDrawRect = try XCTUnwrap(controller.canvasForTesting.imageDrawRect)
+        XCTAssertLessThan(portraitDrawRect.width, portraitDrawRect.height, "横图转过之后应该是竖的")
+        XCTAssertTrue(
+            portraitDrawRect.insetBy(dx: -0.5, dy: -0.5).contains(controller.cropRectForTesting),
+            "选区应落在转过之后的图片上，而不是停在原来那一块"
+        )
+        let pixelCropRect = try XCTUnwrap(
+            controller.canvasForTesting.pixelCropRect(for: controller.cropRectForTesting)
+        )
+        XCTAssertLessThanOrEqual(pixelCropRect.maxX, 10, "取到的像素范围不该越出转过之后的图片")
+        XCTAssertLessThanOrEqual(pixelCropRect.maxY, 40)
+    }
+
+    /// 编辑时缩放窗口，选区跟着图片一起改，不停在原来那一块。
+    func testResizingTheWindowWhileEditingKeepsTheCropSelectionOnTheImage() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("resize.png")
+        try writeTestPNG(to: imageURL, pixelsWide: 40, pixelsHigh: 30)
+        let controller = MainWindowController(settings: AppSettings(defaults: makeIsolatedDefaults()))
+
+        controller.open(url: imageURL)
+        for _ in 0..<100 where !controller.hasLoadedImageForTesting {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.startEditingImage(nil)
+        let before = controller.cropRectForTesting
+
+        controller.window?.setContentSize(NSSize(width: 520, height: 420))
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+
+        let drawRect = try XCTUnwrap(controller.canvasForTesting.imageDrawRect)
+        XCTAssertNotEqual(before, controller.cropRectForTesting, "画布变了，选区应该跟着变")
+        XCTAssertTrue(drawRect.insetBy(dx: -0.5, dy: -0.5).contains(controller.cropRectForTesting))
+    }
+
     func testEnteringFolderBrowserEndsActiveCropSession() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -2606,11 +2669,11 @@ final class MainWindowControllerTests: XCTestCase {
         return view.subviews.lazy.compactMap { self.findTypeFilterPopUp(in: $0) }.first
     }
 
-    private func writeTestPNG(to url: URL) throws {
+    private func writeTestPNG(to url: URL, pixelsWide: Int = 2, pixelsHigh: Int = 2) throws {
         let representation = NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: 2,
-            pixelsHigh: 2,
+            pixelsWide: pixelsWide,
+            pixelsHigh: pixelsHigh,
             bitsPerSample: 8,
             samplesPerPixel: 4,
             hasAlpha: true,

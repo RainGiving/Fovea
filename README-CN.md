@@ -61,8 +61,12 @@ make audit     # 运行项目审计
 make check     # 运行测试和审计
 make dmg       # 生成 .build/artifacts/Fovea-X.Y.Z.dmg
 make install   # 安装 /Applications/Fovea.app
+make default-app # 把 Fovea 设成它声明的图片类型的默认打开方式
 make clean     # 清理 .build
 ```
+
+改完应用之后，本机上 `make install` 和 `make default-app` 两步都要走，
+见[更新之后必须走的两步](docs/post-update-steps.md)。
 
 ## 发布
 
